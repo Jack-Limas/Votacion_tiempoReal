@@ -26,7 +26,7 @@ function resolveSecret() {
 
 export function loadVerificationConfig(overrides = {}) {
   return {
-    instanceId: process.env.INSTANCE_ID ?? `${hostname()}-${process.pid}`,
+    instanceId: process.env.INSTANCE_ID || `${hostname()}-${process.pid}`,
     keyPrefix: process.env.VERIFICATION_KEY_PREFIX ?? 'electoral:{verification}',
     // Stream written by the acta registration script (jurados module).
     streamKey: process.env.VERIFICATION_STREAM_KEY ?? `${baseConfig.redisKeyPrefix}:verification`,
