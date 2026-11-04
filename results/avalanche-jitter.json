@@ -1,0 +1,30 @@
+{
+  "strategy": "jitter",
+  "fixedDelayMs": null,
+  "clients": 8000,
+  "killedInstance": "71f335dfd7fe",
+  "affectedClients": 1000,
+  "reconnected": 1000,
+  "reconnectedOnInstances": {
+    "6fc8e5cd0710": 143,
+    "5d6568d38fad": 143,
+    "66c2cdc2fa97": 143,
+    "f4d8a1148ff7": 142,
+    "8c0f10ba9e67": 143,
+    "22233c043ce4": 143,
+    "975469fe4a19": 143
+  },
+  "landedOnKilledInstance": 0,
+  "secondsToReconnectAll": 13.7,
+  "peakAttemptsPer100ms": 83,
+  "peakAttemptsPerSecond": 284,
+  "failedAttempts": 14,
+  "droppedBeforeKill": 0,
+  "neverDetected": 0,
+  "detectionMs": {
+    "first": 938,
+    "median": 2355,
+    "last": 2676
+  },
+  "baseMs": 4000
+}

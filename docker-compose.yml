@@ -1,0 +1,81 @@
+# Local environment: 8 identical replicas behind nginx (round robin, no sticky
+# sessions) and a single Valkey node. Instances do not know each other: all
+# coordination goes through Valkey.
+#
+# The access codes and token secret below are for DEVELOPMENT ONLY. Production
+# uses docker-compose.prod.yml with secrets from a .env file kept out of Git.
+name: votacion
+
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    # AOF: confirmations survive a restart.
+    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      - "${VALKEY_PORT:-6379}:6379"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  app:
+    build: .
+    image: votacion-tiempo-real:local
+    deploy:
+      replicas: 8
+    environment:
+      PORT: 3000
+      REDIS_URL: redis://valkey:6379
+      TRUST_PROXY: 1
+      # Development-only credentials shared by the 8 instances.
+      VERIFICATION_TOKEN_SECRET: ${VERIFICATION_TOKEN_SECRET:-dev-only-secret-change-in-production-0123456789}
+      VERIFICATION_AUDITOR_CODE: ${VERIFICATION_AUDITOR_CODE:-dev-auditor}
+      VERIFICATION_COORDINATOR_CODE: ${VERIFICATION_COORDINATOR_CODE:-dev-coordinator}
+      MAXLEN: ${MAXLEN:-10000}
+      FANOUT_MODE: ${FANOUT_MODE:-batched}
+      FLUSH_MS: ${FLUSH_MS:-1000}
+      BATCH_SIZE: ${BATCH_SIZE:-100}
+      MAX_REPLAY: ${MAX_REPLAY:-500}
+      # Off locally: the load generator opens 20,000 connections from one IP.
+      RATE_LIMIT_PUBLIC_CONNECTS: ${RATE_LIMIT_PUBLIC_CONNECTS:-0}
+    ulimits:
+      nofile: { soft: 200000, hard: 200000 }
+    restart: unless-stopped
+    depends_on:
+      valkey:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    ulimits:
+      nofile: { soft: 200000, hard: 200000 }
+    restart: unless-stopped
+    depends_on:
+      - app
+
+  # Load generator inside the compose network (avoids the host port
+  # forwarding). Usage: docker compose run --rm --no-deps load --connections=10000
+  load:
+    image: votacion-tiempo-real:local
+    profiles: ["load"]
+    user: root
+    entrypoint: ["node", "scripts/load.js"]
+    environment:
+      BASE_URL: http://nginx
+      REDIS_URL: redis://valkey:6379
+    volumes:
+      - ./results:/app/results
+    ulimits:
+      nofile: { soft: 200000, hard: 200000 }
+    depends_on:
+      - nginx
+
+volumes:
+  valkey-data:

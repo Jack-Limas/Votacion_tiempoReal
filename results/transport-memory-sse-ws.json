@@ -1,0 +1,21 @@
+{
+  "node": "v22.18.0",
+  "clientsPerTransport": 5000,
+  "note": "Server process only, after forced GC; clients run in a separate process. Kernel socket buffers are not included in RSS.",
+  "results": [
+    {
+      "transport": "sse",
+      "open": 5000,
+      "heapKBPerConnection": 6.31,
+      "externalKBPerConnection": 0.01,
+      "rssKBPerConnection": 14.42
+    },
+    {
+      "transport": "ws",
+      "open": 5000,
+      "heapKBPerConnection": 3.36,
+      "externalKBPerConnection": 0,
+      "rssKBPerConnection": -3.51
+    }
+  ]
+}

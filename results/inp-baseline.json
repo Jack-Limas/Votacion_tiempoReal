@@ -1,0 +1,16 @@
+{
+  "label": "baseline",
+  "url": "http://localhost:8088",
+  "transport": "WebSocket",
+  "profile": {
+    "viewport": "360x640@2x",
+    "cpuSlowdown": 6,
+    "network": "150 ms RTT, 1.6 Mbps down, 750 kbps up"
+  },
+  "rounds": 15,
+  "interactions": 102,
+  "inpMs": 72,
+  "candidateListRendersDuringTest": 50,
+  "pageErrors": [],
+  "measuredAt": "2026-11-04T18:13:46.509Z"
+}

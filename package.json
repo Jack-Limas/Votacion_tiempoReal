@@ -1,0 +1,35 @@
+{
+  "name": "votacion-tiempo-real",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test:unit": "node --test \"test/*.test.js\" \"test/unit/*.test.js\"",
+    "test:integration": "node --test --test-concurrency=1 \"test/integration/*.test.js\"",
+    "simulate": "node scripts/simulate-actas.js",
+    "load": "node scripts/load.js",
+    "estimate": "node scripts/estimate-messages.js",
+    "lint": "eslint ."
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.1.0",
+    "redis": "^4.7.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "globals": "^15.15.0",
+    "nodemon": "^3.1.10",
+    "puppeteer-core": "^23.11.1"
+  }
+}

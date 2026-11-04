@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Auditor Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">✓</div><div>Verification<small>Auditor console</small></div></div>
+    <span class="pill warn" id="conn"><span class="dot"></span>Connecting…</span>
+    <div class="spacer"></div>
+    <div class="who" id="who"></div>
+  </header>
+  <div id="banner" class="banner hidden" role="alert"></div>
+  <div id="idle" class="banner warn hidden" role="alert"></div>
+
+  <main class="grid two">
+    <section class="card" aria-labelledby="queue-title">
+      <div class="card-head">
+        <h2 id="queue-title">Queue</h2>
+        <span class="count" id="queue-count">0</span>
+        <div class="spacer"></div>
+        <button class="btn primary small" id="take-next">Take next</button>
+      </div>
+      <ul class="queue" id="queue"></ul>
+    </section>
+
+    <section class="card" aria-labelledby="case-title">
+      <div class="card-head">
+        <h2 id="case-title">My case</h2>
+        <div class="spacer"></div>
+        <span class="muted mono" id="version" title="Snapshot version"></span>
+      </div>
+      <div class="card-body" id="case"></div>
+    </section>
+  </main>
+  <script type="module" src="auditor.js"></script>
+</body>
+</html>

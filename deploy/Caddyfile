@@ -1,0 +1,16 @@
+# Public entry point. Caddy obtains and renews the TLS certificate for
+# SITE_ADDRESS automatically (e.g. 20.30.40.50.sslip.io resolves to that IP).
+# No account email is required by Let's Encrypt.
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	# WebSocket upgrades and Server-Sent Events are proxied as-is; Caddy flushes
+	# text/event-stream responses immediately.
+	reverse_proxy nginx:80 {
+		flush_interval -1
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}
