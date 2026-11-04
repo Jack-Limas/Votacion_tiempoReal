@@ -17,6 +17,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
+import WebSocket from 'ws';
 import { backoffDelay } from '../public/assets/backoff.js';
 
 const args = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => {
@@ -26,6 +27,7 @@ const args = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith
 const BASE = args.url ?? process.env.BASE_URL ?? 'http://localhost:8080';
 const CLIENTS = Number(args.clients ?? 4000);
 const STRATEGY = args.strategy ?? 'jitter';
+const TRANSPORT = args.transport ?? 'sse';
 const FIXED_MS = Number(args.fixed ?? 1000);
 const BASE_MS = args.base ? Number(args.base) : null;
 const OBSERVE_MS = Number(args.observe ?? 70_000);
@@ -37,7 +39,41 @@ const BUCKET_MS = 100;
 const OUTPUT = args.output ?? 'results';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function openWs(client) {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(`${BASE.replace(/^http/, 'ws')}/ws?sub=dep`, { perMessageDeflate: false });
+    let settled = false;
+    let watchdog = null;
+    const feed = () => {
+      clearTimeout(watchdog);
+      watchdog = setTimeout(() => ws.terminate(), WATCHDOG_MS);
+    };
+    ws.on('message', (data) => {
+      feed();
+      const message = JSON.parse(data);
+      if (message.t === 'hello' && !settled) {
+        settled = true;
+        client.instance = message.instance;
+        client.res = { destroy: () => ws.terminate(), destroyed: false };
+        resolve(true);
+      }
+    });
+    ws.on('close', () => {
+      clearTimeout(watchdog);
+      if (client.res) client.res.destroyed = true;
+      if (!settled) {
+        settled = true;
+        resolve(false);
+      } else {
+        client.onClose();
+      }
+    });
+    ws.on('error', () => {});
+  });
+}
+
 function open(client) {
+  if (TRANSPORT === 'ws') return openWs(client);
   return new Promise((resolve) => {
     const req = http.get(new URL('/stream?sub=dep', BASE), { agent: false }, (res) => {
       if (res.statusCode !== 200) {
@@ -147,6 +183,7 @@ async function runExperiment() {
     perSecond.set(s, (perSecond.get(s) ?? 0) + r.attempts);
   }
   const summary = {
+    transport: TRANSPORT,
     strategy: STRATEGY,
     fixedDelayMs: STRATEGY === 'fixed' ? FIXED_MS : null,
     clients: CLIENTS,
@@ -170,8 +207,9 @@ async function runExperiment() {
     baseMs: STRATEGY === 'jitter' ? (BASE_MS ?? 4000) : null
   };
   mkdirSync(OUTPUT, { recursive: true });
-  writeFileSync(`${OUTPUT}/avalanche-${STRATEGY}.csv`, ['t_ms,attempts,reconnected,failed', ...rows.map((r) => `${r.t_ms},${r.attempts},${r.reconnected},${r.failed}`)].join('\n'));
-  writeFileSync(`${OUTPUT}/avalanche-${STRATEGY}.json`, JSON.stringify(summary, null, 2));
+  const name = TRANSPORT === 'ws' ? `avalanche-ws-${STRATEGY}` : `avalanche-${STRATEGY}`;
+  writeFileSync(`${OUTPUT}/${name}.csv`, ['t_ms,attempts,reconnected,failed', ...rows.map((r) => `${r.t_ms},${r.attempts},${r.reconnected},${r.failed}`)].join('\n'));
+  writeFileSync(`${OUTPUT}/${name}.json`, JSON.stringify(summary, null, 2));
   console.log(JSON.stringify(summary, null, 2));
   console.log(`Restarting ${victim}...`);
   await docker('start', victim);
