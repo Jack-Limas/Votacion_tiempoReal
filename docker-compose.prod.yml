@@ -1,0 +1,99 @@
+# Production on a single Ubuntu VM: Caddy (HTTPS) -> nginx (round robin, no
+# sticky sessions) -> 8 app replicas -> Valkey (AOF, password, private).
+# Only Caddy publishes ports (80 for the ACME challenge and redirect, 443).
+# Every secret comes from .env, which is never committed (see
+# .env.production.example). Images are multi-arch (amd64 and arm64).
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+name: votacion
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    command:
+      - sh
+      - -c
+      - exec valkey-server --appendonly yes --appendfsync everysec --requirepass "$$VALKEY_PASSWORD" --maxmemory 768mb --maxmemory-policy noeviction
+    environment:
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:?set VALKEY_PASSWORD in .env}
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -a \"$$VALKEY_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging: *logging
+
+  app:
+    build: .
+    image: votacion-tiempo-real:prod
+    deploy:
+      replicas: 8
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      REDIS_URL: redis://:${VALKEY_PASSWORD}@valkey:6379
+      # Caddy and nginx in front of the app.
+      TRUST_PROXY: 2
+    ulimits:
+      nofile: { soft: 200000, hard: 200000 }
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      valkey:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    ulimits:
+      nofile: { soft: 200000, hard: 200000 }
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      - app
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "${HTTP_PUBLISH:-80}:80"
+      - "${HTTPS_PUBLISH:-443}:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env, e.g. 20.30.40.50.sslip.io}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    ulimits:
+      nofile: { soft: 200000, hard: 200000 }
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      - nginx
+
+volumes:
+  valkey-data:
+  caddy-data:
+  caddy-config:
