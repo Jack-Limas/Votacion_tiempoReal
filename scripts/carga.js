@@ -32,7 +32,7 @@ function leerOpciones(argv) {
     desde: Number(valores.desde ?? 0),
     hasta: Number(valores.hasta ?? 40),
     reset: valores.reset !== '0',
-    salida: valores.salida ?? 'resultados',
+    salida: valores.salida ?? 'results',
     etiqueta: valores.etiqueta ?? '',
     semilla: Number(valores.semilla ?? 1)
   };

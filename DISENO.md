@@ -1,6 +1,6 @@
 # Diseño del módulo público (RF-4, RF-5, RF-6)
 
-Este documento cubre la difusión de resultados al público: el backplane en Redis,
+Este documento cubre la difusión de results al público: el backplane en Redis,
 la suscripción por tópico, el envío por lotes y la reconexión con recuperación.
 Las cifras salen de las pruebas incluidas en el repositorio (ver README).
 
@@ -160,7 +160,7 @@ cada 100 envíos.
 de la jornada comprimidos x30 (3.817 envíos: 3.305 actas que generan evento,
 57 de ellas correcciones; además 240 reenvíos y 272 dudosas). Mezcla de
 suscripciones: 50% `dep`, 35% municipio, 15% puesto. CSV por segundo e
-instancia en `resultados/`.
+instancia en `results/`.
 
 | | naive | batched (BATCH_SIZE=100) |
 |---|---|---|

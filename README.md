@@ -131,7 +131,7 @@ the WebSocket endpoint `/ws/verification`. Run `docker compose up -d` for a
 local Redis. Design, Redis keys, TTLs, costs and failure behaviour are in
 [docs/verification.md](docs/verification.md).
 
-## Módulo público: difusión de resultados (RF-4, RF-5, RF-6)
+## Módulo público: difusión de results (RF-4, RF-5, RF-6)
 
 Los jurados envían actas por `POST /api/actas`. El mismo script Lua que suma el
 acta escribe el evento en el stream `st:eventos`. Cada instancia lee ese stream
@@ -173,7 +173,7 @@ docker compose run --rm --no-deps carga --conexiones=10000 --procesos=4 --veloci
 npm run estimar -- --flush=1000 --mezcla=dep:0.5,mun:0.35,pto:0.15             # jornada completa
 ```
 
-Cada corrida reinicia los datos y deja `resultados/carga-<modo>-<conexiones>.csv`
+Cada corrida reinicia los datos y deja `results/carga-<modo>-<conexiones>.csv`
 (por segundo e instancia) y un `.json` con el resumen.
 
 ### Variables de entorno

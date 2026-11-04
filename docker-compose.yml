@@ -60,7 +60,7 @@ services:
       BASE_URL: http://nginx
       REDIS_URL: redis://valkey:6379
     volumes:
-      - ./resultados:/app/resultados
+      - ./results:/app/results
     ulimits:
       nofile: { soft: 200000, hard: 200000 }
     depends_on:
