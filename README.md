@@ -32,7 +32,9 @@ además de `startServer` y `stopServer`, para facilitar inyección de manejadore
 y pruebas. SSE puede añadirse como una ruta HTTP sobre el mismo servidor.
 
 Configura `CORS_ORIGIN` como una lista de orígenes separados por comas en los
-entornos desplegados. El valor `*` es solo un valor inicial de desarrollo.
+entornos desplegados. El valor `*` permite solicitudes desde cualquier origen;
+WebSocket comparte el servidor HTTP y no filtra conexiones por encabezado
+`Origin`.
 
 ## Módulo actual de jurados y digitadores
 
@@ -45,6 +47,39 @@ que reintenta los envíos al recuperar conectividad.
 2. Instale dependencias con `npm install`.
 3. Inicie Redis y ejecute `npm start`.
 4. Ejecute las pruebas con `npm test`.
+
+## Despliegue en Render
+
+Cree un servicio **Web Service** desde el repositorio y configure:
+
+- **Build Command:** `npm install`
+- **Start Command:** `npm start` (el script ejecuta `node src/server.js`)
+- **Health Check Path:** `/health`
+- **Runtime:** Node.js 20 o posterior
+
+Render asigna `PORT` al proceso; el servidor HTTP y WebSocket lo comparten y
+escuchan en ese puerto. No es necesario definir `PORT` manualmente en el panel.
+Agregue `REDIS_URL` en las variables de entorno con la URL privada de la
+instancia Redis utilizada por el servicio. Use `rediss://` si esa instancia
+requiere TLS; el cliente `redis` negocia TLS a partir del esquema de la URL.
+El cliente reintenta las desconexiones con backoff y reporta errores en los
+logs. Si Redis no está disponible al procesar un acta, la API responde `503`
+para que el cliente conserve el envío y vuelva a intentarlo.
+
+`CORS_ORIGIN` es opcional: omítala para aceptar cualquier origen, o defina una
+lista de orígenes separada por comas. No se requieren variables adicionales
+para habilitar CORS o WebSockets.
+
+## Despliegue en Vercel
+
+`vercel.json` enruta las solicitudes HTTP a `src/server.js`, que exporta la
+aplicación Express como handler. Configure `REDIS_URL` en las variables de
+entorno del proyecto de Vercel. Redis se conecta de forma diferida al recibir
+un acta; el endpoint `/health` no requiere esa conexión.
+
+Vercel ejecuta funciones serverless y no mantiene conexiones WebSocket
+persistentes. Por eso el servidor WebSocket solo se crea en el modo local; use
+los endpoints HTTP para recibir actas en este despliegue.
 
 El servicio requiere una instancia Redis. Para conservar confirmaciones frente
 a reinicios, configure Redis con AOF y/o replicación según el nivel de

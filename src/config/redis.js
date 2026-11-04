@@ -2,7 +2,15 @@ import { createClient } from 'redis';
 import { config } from '../config.js';
 
 function createRedisClient(name, options) {
-  const client = createClient(options);
+  const client = createClient({
+    ...options,
+    socket: {
+      ...options.socket,
+      reconnectStrategy(retries) {
+        return Math.min(100 * (2 ** Math.min(retries, 5)), 3000);
+      }
+    }
+  });
   client.on('error', (error) => {
     console.error(`Error del cliente Redis ${name}:`, error);
   });

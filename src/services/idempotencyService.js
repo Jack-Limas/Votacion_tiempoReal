@@ -116,6 +116,10 @@ export function createIdempotencyService(redis, {
           };
 
       try {
+        if (!redis.isOpen) {
+          await redis.connect();
+        }
+
         const rawResult = await redis.eval(REGISTER_ACTA_SCRIPT, {
           keys: [
             `${keyPrefix}:idem:${acta.idem}`,
