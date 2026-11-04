@@ -21,6 +21,7 @@ capacity; repeat them with the generator on another machine
 | `transport-memory-*.json` | `node --expose-gc transport-memory.js` | Server heap per open connection after forced GC, both orders: SSE ≈ 6.2 KB, WebSocket ≈ 3.4 KB. |
 | `inp-baseline.json`, `inp-under-load-10k-ws.json` | `measure-inp.js` | INP of the public page on a 6x-throttled CPU, 360x640, Slow-4G-like network: 72 ms without load, 160 ms during the peak with 10,000 WebSocket clients. |
 | `avalanche-{immediate,fixed,jitter}.*`, `avalanche.svg` | `avalanche.js` | An instance holding 1,000 of 8,000 SSE clients is killed: peak reconnection attempts per second 512 (immediate), 576 (fixed 1 s), 284 (full jitter, 4 s base); every client reconnected to the other 7 instances. |
+| `avalanche-ws-jitter.*` | `avalanche.js --transport=ws` | Same experiment with WebSocket clients (the public page's transport): all 1,000 reconnected elsewhere in 4.2 s, peak 270 attempts/s, 0 failed. |
 | `avalanche-jitter-base500ms.*` | `avalanche.js` (earlier run) | Same experiment with a 500 ms jitter base: peak 945/s, higher than without jitter, which is why the base is now 4 s. Recorded before a client-side timeout bug in the script was fixed; all 1,000 clients reconnected in it. |
 | `archive/carga-*` | previous `scripts/carga.js` (Spanish field names) | 10,000 SSE clients, naive vs batched fan-out, from the delivered version; kept for the RF-4 comparison described in `docs/results-design.md`. |
 

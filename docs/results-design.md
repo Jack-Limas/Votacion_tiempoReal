@@ -52,7 +52,11 @@ Instances keep only their local connections. They never talk to each other
    Several commands sent from Node would interleave with other instances'
    commands and expose half-applied states; `MULTI` cannot branch on values read
    inside the transaction.
-4. **Event.** `XADD st:events MAXLEN ~ N` with the **new absolute values** of
+4. **Location.** A mesa's puesto and municipio are fixed by its first applied
+   acta; a later acta with another location is answered `409
+   location_conflict` and changes nothing (otherwise its differences would be
+   applied to the new levels while the old figures stayed in the old ones).
+5. **Event.** `XADD st:events MAXLEN ~ N` with the **new absolute values** of
    every changed level, in the same script: state and event are atomic.
 
 The old `aggregate` hash of the delivered version was removed: it added every
@@ -217,7 +221,8 @@ network the kernel buffers are far smaller.
   and a 4 s first window (`public/assets/backoff.js`). Measured with 8,000
   clients and one killed instance holding 1,000 of them: peak attempts 512/s
   (immediate retry), 576/s (fixed 1 s), 284/s (jitter); all reconnected to the
-  remaining 7 instances. A 500 ms first window concentrated the herd (945/s),
+  remaining 7 instances; with WebSocket clients all 1,000 reconnected in 4.2 s
+  (peak 270/s). A 500 ms first window concentrated the herd (945/s),
   so the first window must scale with the herd size. Chart:
   `results/avalanche.svg`.
 * **Connection bursts.** The 20,000-client run exposed Node's default accept
