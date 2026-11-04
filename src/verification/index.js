@@ -14,8 +14,10 @@ export function createVerificationModule({ redis, subscriber, config = loadVerif
   const health = createRedisHealth(redis, { intervalMs: config.healthIntervalMs, logger });
   const gateway = createVerificationGateway({ config, store, health, subscriber, logger });
   // Blocking XREADGROUP needs its own connection so it never delays other commands.
+  const ingestorClient = redis.duplicate();
+  ingestorClient.on('error', (error) => logger.error('Verification ingest Redis client error:', error.message));
   const ingestor = createIngestor({
-    client: redis.duplicate(),
+    client: ingestorClient,
     store,
     streamKey: config.streamKey,
     group: config.consumerGroup,
