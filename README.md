@@ -124,7 +124,7 @@ node scripts/smoke.js --url=http://localhost:8080             # routes + full ac
 ```
 
 Tests that need an unavailable dependency are skipped with a message, never
-silently passed. Last full run on the development machine: **78/78 passed**
+silently passed. Last full run on the development machine: **79/79 passed**
 with Valkey and the 8-replica stack. Integration coverage includes RF-2 (all 24
 arrival orders), verification decisions, RF-5, RF-6 (A/B on different
 instances), RF-9 (deliberately slow TCP client), RF-10 (Redis cut for jurados,
