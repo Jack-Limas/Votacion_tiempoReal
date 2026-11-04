@@ -59,7 +59,8 @@ const LABELS = {
   reject: ['bad', 'Rejected by audit'],
   recount: ['bad', 'Physical recount ordered'],
   rejected: ['bad', 'Rejected (invalid data)'],
-  idempotency_conflict: ['bad', 'Conflict: resend as new version']
+  idempotency_conflict: ['bad', 'Conflict: resend as new version'],
+  location_conflict: ['bad', 'Mesa registered under another puesto']
 };
 
 function renderQueue() {

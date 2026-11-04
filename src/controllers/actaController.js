@@ -16,7 +16,7 @@ export function createActaController(idempotencyService) {
     try {
       const result = await idempotencyService.registerActa(req.body, validation);
 
-      if (result.status === 'idempotency_conflict') {
+      if (result.status === 'idempotency_conflict' || result.status === 'location_conflict') {
         return res.status(409).json(result);
       }
       if (result.status === 'verification_required' && !result.duplicate) {

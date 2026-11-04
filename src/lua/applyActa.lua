@@ -80,6 +80,23 @@ if ARGV[5] == '1' then
   local version = tonumber(acta.version)
   local previous = tonumber(redis.call('HGET', KEYS[3], 'version') or '0')
   local previousDigest = redis.call('HGET', KEYS[3], 'digest') or ''
+  -- A mesa belongs to one puesto and municipio. The location is fixed by the
+  -- first applied acta; a later acta for the same mesa with another location
+  -- is refused, because its differences would be applied to the new levels
+  -- while the old figures stayed counted in the old ones.
+  local location = redis.call('HMGET', KEYS[3], 'puesto', 'municipio')
+  if previous > 0 and location[1] and (location[1] ~= tostring(acta.puesto) or location[2] ~= tostring(acta.municipio)) then
+    return cjson.encode({
+      status = 'location_conflict',
+      accepted = false,
+      duplicate = false,
+      acta = acta.acta,
+      mesa = acta.mesa,
+      registeredPuesto = tonumber(location[1]),
+      registeredMunicipio = tonumber(location[2]),
+      message = 'This mesa is registered under puesto ' .. location[1] .. ' / municipio ' .. location[2] .. '; check the acta.'
+    })
+  end
   if version < previous or (version == previous and ARGV[10] <= previousDigest) then
     result.superseded = true
     result.appliedVersion = previous
@@ -124,7 +141,8 @@ if ARGV[5] == '1' then
     for candidate, amount in pairs(votes) do
       redis.call('HSET', KEYS[3], 'v:' .. candidate, amount)
     end
-    redis.call('HSET', KEYS[3], 'version', version, 'digest', ARGV[10], 'acta', acta.acta)
+    redis.call('HSET', KEYS[3], 'version', version, 'digest', ARGV[10], 'acta', acta.acta,
+      'puesto', acta.puesto, 'municipio', acta.municipio)
     changes['mesa:' .. acta.mesa] = mesa
 
     -- Puesto, municipio and department: HINCRBY returns the new absolute

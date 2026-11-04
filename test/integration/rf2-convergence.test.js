@@ -144,3 +144,14 @@ test('RF-1: the same figures resent with a new idem do not produce an empty corr
   assert.equal(again.superseded, true);
   assert.equal(await client.xLen(keys.stream), length, 'no new public event');
 });
+
+test('a later acta for the same mesa with another location is refused, not misattributed', options, async (t) => {
+  const { client, keys, service } = await withPrefix(t);
+  await service.registerActa(V1, validateActa(V1));
+  const moved = { ...V2, puesto: 177, idem: randomUUID() };
+  const answer = await service.registerActa(moved, validateActa(moved));
+  assert.equal(answer.status, 'location_conflict');
+  assert.equal(answer.registeredPuesto, 176);
+  assert.equal(await client.exists(keys.total('pto:177')), 0, 'nothing counted in the wrong puesto');
+  assert.equal(await client.hGet(keys.total('pto:176'), 'v:C1'), '100', 'the original puesto keeps its figures');
+});
