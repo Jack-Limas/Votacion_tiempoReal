@@ -196,13 +196,28 @@ SSE, `ws.bufferedAmount` for WebSocket):
   its cursors. The time limit matters: a degraded client gets no more data, so
   a client that never reads would otherwise pin its backlog forever.
 
-Demonstrated with a TCP client that stops reading
-(`test/integration/rf9-slow-client.test.js`): only that client is degraded, the
-fast one keeps receiving, and after resuming the slow one gets one snapshot
-equal to the fast client's state; a client that never drains is disconnected
-with the signal. On Windows loopback the kernel absorbed ~64 MB before Node's
-buffer grew, so the thresholds act late on a local socket; over a real mobile
-network the kernel buffers are far smaller.
+Demonstrated in `test/integration/rf9-slow-client.test.js`: only the slow
+connection is degraded, the fast one keeps receiving, after it drains it gets
+one snapshot equal to the fast client's state, and a connection that never
+drains is disconnected with the reconnect signal. The test corks the server
+side of the slow connection instead of relying on the client to stop reading:
+a client that stops reading only makes Node's buffer grow after the kernel
+socket buffers are full, and their size depends on the OS (on Windows loopback
+~64 MB were absorbed; on Linux with `net.ipv4.tcp_rmem` up to 33 MB the old
+version of the test never filled them). Corking reproduces deterministically
+the state the server reaches once those buffers are full.
+
+**Proxies delay detection.** In the deployment the app's peer is nginx (and
+Caddy in front of it), not the phone. nginx keeps reading from the app while
+it can buffer towards the client (`proxy_buffering off` on `/stream` removes
+the response buffer but the upstream and downstream socket buffers remain; on
+`/ws` nginx tunnels through its own buffers), and Caddy adds its own. So
+`writableLength` on the app grows only after the slow client's kernel buffers,
+the proxies' buffers and the socket buffers between them are all full: a slow
+client is detected later, and that memory sits in the proxies rather than in
+Node. The thresholds still bound the app's memory; the proxies' buffers are
+bounded by their own configuration and by `proxy_send_timeout`/
+`proxy_read_timeout`.
 
 ## 10. Degradation and dead instances (RF-10)
 

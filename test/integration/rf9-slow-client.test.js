@@ -1,8 +1,14 @@
 // RF-9 demonstration with a deliberately slow client, against a real
-// Redis/Valkey. The results module runs in-process with small thresholds; the
-// slow client is a raw TCP socket that stops reading (socket.pause()), so the
-// server output buffer for that connection grows while a fast client keeps
-// receiving everything.
+// Redis/Valkey. The results module runs in-process with small thresholds.
+//
+// Determinism: a client that merely stops reading only makes Node's output
+// buffer grow after the kernel buffers are full, and their size depends on
+// the OS (Linux with net.ipv4.tcp_rmem up to 33 MB absorbed more than this
+// test pushes). So the test corks the SERVER side of the slow connection
+// (socket.cork()): every byte the app writes stays in Node's own buffer, which
+// is exactly what res.writableLength measures, i.e. the state the server is in
+// once the kernel buffers of a slow client are full. Uncorking is the client
+// reading again. No production code or threshold is changed for the test.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -56,6 +62,11 @@ async function startServer(t, overrides) {
   const app = express();
   app.use(createResultsRoutes(results));
   const server = createServer(app);
+  const serverSockets = new Set();
+  server.on('connection', (socket) => {
+    serverSockets.add(socket);
+    socket.on('close', () => serverSockets.delete(socket));
+  });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await results.stop();
@@ -64,12 +75,13 @@ async function startServer(t, overrides) {
     for await (const key of redis.scanIterator({ MATCH: `${prefix}*`, COUNT: 500 })) await redis.del(key);
     await redis.quit();
   });
-  return { redis, keys, results, port: server.address().port, url: `http://127.0.0.1:${server.address().port}` };
+  return { redis, keys, results, serverSockets, port: server.address().port, url: `http://127.0.0.1:${server.address().port}` };
 }
 
-// A client that sends the request and then never reads.
-function slowClient(port) {
-  const socket = tcpConnect(port, '127.0.0.1');
+// A client whose connection stops draining: its server-side socket is corked
+// (see the note at the top), and uncorked when it "reads again".
+async function slowClient(srv) {
+  const socket = tcpConnect(srv.port, '127.0.0.1');
   let text = '';
   let closed = false;
   socket.on('data', (chunk) => {
@@ -79,11 +91,16 @@ function slowClient(port) {
     closed = true;
   });
   socket.on('error', () => {});
-  socket.write(`GET /stream?sub=dep HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n`);
+  await new Promise((resolve) => socket.once('connect', resolve));
+  socket.write('GET /stream?sub=dep HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n');
+  // Wait for the response headers so the SSE connection is registered.
+  await waitFor(() => text.includes('\r\n\r\n'), 5000);
+  const serverSide = [...srv.serverSockets].find((s) => s.remotePort === socket.localPort);
+  assert.ok(serverSide, 'server side of the slow connection found');
   return {
     socket,
-    pause: () => socket.pause(),
-    resume: () => socket.resume(),
+    stopReading: () => serverSide.cork(),
+    readAgain: () => serverSide.uncork(),
     get text() {
       return text;
     },
@@ -130,10 +147,9 @@ test('RF-9: a slow client stops getting detail, the fast one does not, and it is
     }
   });
   t.after(() => fastConn.close());
-  const slow = slowClient(srv.port);
+  const slow = await slowClient(srv);
   t.after(() => slow.socket.destroy());
-  await sleep(300);
-  slow.pause();
+  slow.stopReading();
 
   let pushed = 0;
   const degraded = await waitFor(async () => {
@@ -142,7 +158,7 @@ test('RF-9: a slow client stops getting detail, the fast one does not, and it is
     return srv.results.metrics().slow.degraded >= 1;
   }, 60_000);
   assert.ok(degraded, `the slow client was never degraded after ${pushed} events`);
-  console.log(`  slow client degraded after ${pushed} events (~${Math.round(pushed * 4)} KB)`);
+  console.log(`  slow client degraded after ${pushed} events (folded into window frames)`);
 
   await pushEvents(srv.redis, srv.keys, 200);
   assert.ok(await waitFor(() => fast.state('dep')?.['v:C0'] === counter * 1000, 10_000), 'the fast client keeps receiving everything');
@@ -151,7 +167,7 @@ test('RF-9: a slow client stops getting detail, the fast one does not, and it is
 
   // The slow client starts reading again: its buffer drains and the recovery
   // loop sends one snapshot that equals the stored totals.
-  slow.resume();
+  slow.readAgain();
   assert.ok(await waitFor(() => srv.results.metrics().slow.recovered >= 1, 20_000), 'never recovered');
   assert.ok(await waitFor(() => slow.text.includes('"t":"snapshot"', slow.text.indexOf('"t":"snapshot"') + 1), 5000), 'no recovery snapshot received');
   const lastSnapshot = slow.text.slice(slow.text.lastIndexOf('{"t":"snapshot"'));
@@ -163,17 +179,17 @@ test('RF-9: a slow client stops getting detail, the fast one does not, and it is
 
 test('RF-9: a slow client that never drains is disconnected with a reconnect signal', options, async (t) => {
   const srv = await startServer(t, { slowSoftBytes: 64 * 1024, slowHardBytes: 256 * 1024, slowMaxDegradedMs: 2000 });
-  const slow = slowClient(srv.port);
+  const slow = await slowClient(srv);
   t.after(() => slow.socket.destroy());
-  await sleep(300);
-  slow.pause();
+  slow.stopReading();
 
   const disconnected = await waitFor(async () => {
     await pushEvents(srv.redis, srv.keys, 400);
     return srv.results.metrics().slow.disconnected >= 1;
   }, 60_000);
   assert.ok(disconnected, 'the slow client was never disconnected');
-  slow.resume();
+  // The client reads again: it receives the queued reconnect signal and the end.
+  slow.readAgain();
   assert.ok(await waitFor(() => slow.closed, 10_000), 'socket closed');
   assert.ok(await waitFor(() => srv.results.registry.connections.size === 0, 10_000), 'the connection left the registry');
   assert.ok(slow.text.includes('"t":"reconnect","reason":"slow_consumer"'), 'the client got the reconnect signal');
