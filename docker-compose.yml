@@ -1,12 +1,15 @@
-# Entorno local: 8 réplicas idénticas detrás de nginx (round robin, sin
-# sesiones pegajosas) y un solo nodo Valkey. Las instancias no se conocen entre
-# sí: toda la coordinación pasa por Valkey.
+# Local environment: 8 identical replicas behind nginx (round robin, no sticky
+# sessions) and a single Valkey node. Instances do not know each other: all
+# coordination goes through Valkey.
+#
+# The access codes and token secret below are for DEVELOPMENT ONLY. Production
+# uses docker-compose.prod.yml with secrets from a .env file kept out of Git.
 name: votacion
 
 services:
   valkey:
     image: valkey/valkey:8-alpine
-    # AOF como en la configuración de Jack: las confirmaciones sobreviven a un reinicio.
+    # AOF: confirmations survive a restart.
     command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     ports:
       - "${VALKEY_PORT:-6379}:6379"
@@ -24,10 +27,13 @@ services:
     deploy:
       replicas: 8
     environment:
-      # Secreto compartido por las 8 instancias para los tokens de verificación (módulo de Jack).
-      VERIFICATION_TOKEN_SECRET: ${VERIFICATION_TOKEN_SECRET:-solo-local-cambiar-en-produccion-0123456789}
       PORT: 3000
       REDIS_URL: redis://valkey:6379
+      TRUST_PROXY: 1
+      # Development-only credentials shared by the 8 instances.
+      VERIFICATION_TOKEN_SECRET: ${VERIFICATION_TOKEN_SECRET:-dev-only-secret-change-in-production-0123456789}
+      VERIFICATION_AUDITOR_CODE: ${VERIFICATION_AUDITOR_CODE:-dev-auditor}
+      VERIFICATION_COORDINATOR_CODE: ${VERIFICATION_COORDINATOR_CODE:-dev-coordinator}
       MAXLEN: ${MAXLEN:-10000}
       FANOUT_MODE: ${FANOUT_MODE:-batched}
       FLUSH_MS: ${FLUSH_MS:-1000}
@@ -35,6 +41,7 @@ services:
       MAX_REPLAY: ${MAX_REPLAY:-500}
     ulimits:
       nofile: { soft: 200000, hard: 200000 }
+    restart: unless-stopped
     depends_on:
       valkey:
         condition: service_healthy
@@ -47,14 +54,16 @@ services:
       - "${HTTP_PORT:-8080}:80"
     ulimits:
       nofile: { soft: 200000, hard: 200000 }
+    restart: unless-stopped
     depends_on:
       - app
 
-  # Generador de carga dentro de la red de compose (no pasa por el reenvío de
-  # puertos del host). Uso: docker compose run --rm load --conexiones=10000
+  # Load generator inside the compose network (avoids the host port
+  # forwarding). Usage: docker compose run --rm --no-deps load --connections=10000
   load:
     image: votacion-tiempo-real:local
     profiles: ["load"]
+    user: root
     entrypoint: ["node", "scripts/load.js"]
     environment:
       BASE_URL: http://nginx

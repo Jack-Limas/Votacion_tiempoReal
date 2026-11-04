@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createApp } from './app.js';
 import { config } from './config/env.js';
 import {
@@ -21,7 +21,8 @@ export const verification = createVerificationModule({
 export const results = createResults({ redis: redisClient });
 export const app = createApp(createIdempotencyService(redisClient), {
   routers: [verification.router, createResultsRoutes(results)],
-  actaMiddleware: [verification.actaRateLimiter]
+  actaMiddleware: [verification.actaRateLimiter],
+  publicDir: fileURLToPath(new URL('../public/', import.meta.url))
 });
 export const server = createServer(app);
 export const webSocketServer = createWebSocketServer(server, { routes: [verification.upgradeRoute] });

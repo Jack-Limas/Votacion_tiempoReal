@@ -25,6 +25,8 @@ export const config = {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
+  // Number of reverse proxies in front of the app (nginx = 1, Caddy + nginx = 2).
+  trustProxy: Number(process.env.TRUST_PROXY ?? 0),
   redisUrl: process.env.REDIS_URL ?? 'redis://localhost:6379',
   idempotencyTtlSeconds: positiveInteger(
     process.env.REDIS_IDEMPOTENCY_TTL_SECONDS,
