@@ -39,6 +39,8 @@ async function check(path, assertion) {
 await check('/', async (page) => {
   await page.waitForFunction(() => document.querySelector('#conn')?.textContent.includes('Live'), { timeout: 10_000 });
   await page.waitForFunction(() => document.querySelector('#cursor')?.textContent !== '–', { timeout: 10_000 });
+  const transport = await page.$eval('#transport', (n) => n.textContent);
+  if (transport !== 'WebSocket') throw new Error(`expected WebSocket, got ${transport}`);
   await page.select('#mun', 'mun:1');
   await page.waitForFunction(() => document.querySelector('#scope-title')?.textContent === 'Municipality 1', { timeout: 5000 });
   return `(cursor ${await page.$eval('#cursor', (n) => n.textContent)})`;

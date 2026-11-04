@@ -1,6 +1,6 @@
-// Public results page. Transport: Server-Sent Events (server -> client only).
-// The browser's automatic EventSource reconnection is not used: it cannot
-// send our cursors and it retries in lock-step. This client reconnects with
+// Public results page (server -> client only). The browser's automatic
+// EventSource reconnection is not used: it cannot send our cursors and it
+// retries in lock-step. This client reconnects with
 // exponential backoff + full jitter and resumes from its cursor (RF-6), so it
 // ends in exactly the same state as a client that never disconnected.
 import { backoffDelay } from '/assets/backoff.js';
@@ -141,29 +141,66 @@ function apply(message) {
   if (message.topic === topic) scheduleRender();
 }
 
+// Transport: WebSocket first (measured: about half the server heap per
+// connection of SSE, same CPU, lower latency; see results/). If the upgrade
+// fails twice without ever opening (a proxy that blocks WebSocket), the page
+// falls back to SSE for the rest of the session. Both carry the same frames.
+let transport = 'ws';
+let wsFailures = 0;
+
+function openTransport(sub, { onOpen, onMessage, onClose }) {
+  if (transport === 'ws') {
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${scheme}://${location.host}/ws?sub=${encodeURIComponent(sub)}`);
+    let opened = false;
+    ws.onopen = () => {
+      opened = true;
+      wsFailures = 0;
+      onOpen();
+    };
+    ws.onmessage = (event) => onMessage(event.data);
+    ws.onclose = (event) => {
+      if (!opened && (wsFailures += 1) >= 2) transport = 'sse';
+      // 4008: the server dropped us as a slow consumer; come back at once.
+      onClose(event.code === 4008);
+    };
+    return { close: () => { ws.onclose = null; ws.close(); } };
+  }
+  const es = new EventSource(`/stream?sub=${encodeURIComponent(sub)}`);
+  es.onopen = onOpen;
+  es.onmessage = (event) => onMessage(event.data);
+  es.onerror = () => onClose(false);
+  return { close: () => es.close() };
+}
+
 function connect() {
   clearTimeout(retryTimer);
   const entry = states.get(topic);
   const sub = entry?.cursor ? `${topic}@${entry.cursor}` : topic;
   setConnection('warn', attempt === 0 ? 'Connecting…' : 'Reconnecting…');
-  source = new EventSource(`/stream?sub=${encodeURIComponent(sub)}`);
-  source.onopen = () => {
-    feedWatchdog();
-    setConnection('ok', 'Live');
-    banner(null);
-    clearTimeout(stableTimer);
-    // Reset the backoff only once the connection proved stable.
-    stableTimer = setTimeout(() => { attempt = 0; }, 10_000);
-  };
-  source.onmessage = (event) => {
-    feedWatchdog();
-    try {
-      apply(JSON.parse(event.data));
-    } catch (error) {
-      console.error(error);
+  source = openTransport(sub, {
+    onOpen() {
+      feedWatchdog();
+      setConnection('ok', 'Live');
+      banner(null);
+      $('transport').textContent = transport === 'ws' ? 'WebSocket' : 'SSE';
+      clearTimeout(stableTimer);
+      // Reset the backoff only once the connection proved stable.
+      stableTimer = setTimeout(() => { attempt = 0; }, 10_000);
+    },
+    onMessage(data) {
+      feedWatchdog();
+      try {
+        const message = JSON.parse(data);
+        if (message.t !== 'hello') apply(message);
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    onClose(immediate) {
+      reconnect(immediate);
     }
-  };
-  source.onerror = () => reconnect(false);
+  });
 }
 
 function reconnect(immediate) {
