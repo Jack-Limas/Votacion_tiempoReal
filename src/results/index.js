@@ -9,6 +9,7 @@ import { openSseConnection } from './sse.js';
 import { createStreamReader } from './stream.js';
 import { createTopicRegistry, parseSubscriptions, TOPIC_PATTERN } from './topics.js';
 import { openWebSocketConnection } from './websocket.js';
+import { createRateLimiter } from '../services/rateLimiter.js';
 
 // Results module (RF-4, RF-5, RF-6, RF-9, RF-10 for the public audience):
 // global stream -> per-topic fan-out -> SSE (default), WebSocket or polling.
@@ -84,6 +85,13 @@ export function createResults({ redis, config = defaultConfig, logger = console 
   });
   const timers = [];
   let started = false;
+  // A misconfigured client that reconnects in a loop is cut per IP.
+  const connectLimiter = createRateLimiter(redis, {
+    keyPrefix: config.redisKeyPrefix,
+    scope: 'public-connect',
+    windowMs: config.rateLimitWindowMs,
+    limit: config.rateLimitPublicConnects
+  });
 
   function attach(conn, subscriptions) {
     registry.add(conn);
@@ -102,17 +110,33 @@ export function createResults({ redis, config = defaultConfig, logger = console 
     backpressure.forget(conn);
   }
 
+  // Client address behind TRUST_PROXY reverse proxies (the upgrade request
+  // never goes through Express, so req.ip is not available).
+  function forwardedIp(req) {
+    const chain = String(req.headers['x-forwarded-for'] ?? '').split(',').map((v) => v.trim()).filter(Boolean);
+    return config.trustProxy > 0 && chain.length > 0
+      ? chain[Math.max(0, chain.length - config.trustProxy)]
+      : req.socket.remoteAddress;
+  }
+
   function parse(raw) {
     return parseSubscriptions(raw, { maxTopics: config.maxTopicsPerConnection });
   }
 
-  function handleStream(req, res) {
+  async function handleStream(req, res) {
     let subscriptions;
     try {
       subscriptions = parse(req.query.sub);
     } catch (error) {
       return res.status(400).json({ status: 'rejected', message: error.message });
     }
+    const verdict = await connectLimiter(req.ip);
+    if (!verdict.allowed) {
+      const retryAfter = Math.max(1, Math.ceil(verdict.retryAfterMs / 1000));
+      res.set('Retry-After', String(retryAfter));
+      return res.status(429).json({ status: 'rate_limited', retryAfterSeconds: retryAfter, message: 'Too many connections from this address; retry later.' });
+    }
+    if (req.destroyed) return undefined;
     const conn = openSseConnection(req, res, config.instanceId);
     req.on('close', () => detach(conn));
     attach(conn, subscriptions);
@@ -120,7 +144,7 @@ export function createResults({ redis, config = defaultConfig, logger = console 
   }
 
   // Same protocol over WebSocket (/ws?sub=...): used to compare transports.
-  function handleWebSocket(ws, req) {
+  async function handleWebSocket(ws, req) {
     let subscriptions;
     try {
       subscriptions = parse(new URL(req.url, 'http://localhost').searchParams.get('sub'));
@@ -128,6 +152,12 @@ export function createResults({ redis, config = defaultConfig, logger = console 
       ws.close(4400, error.message.slice(0, 120));
       return;
     }
+    const verdict = await connectLimiter(forwardedIp(req));
+    if (!verdict.allowed) {
+      ws.close(4429, `rate limited; retry in ${Math.ceil(verdict.retryAfterMs / 1000)} s`);
+      return;
+    }
+    if (ws.readyState !== ws.OPEN) return;
     const conn = openWebSocketConnection(ws, config.instanceId);
     ws.on('close', () => detach(conn));
     attach(conn, subscriptions);

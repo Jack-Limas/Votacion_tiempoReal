@@ -39,6 +39,8 @@ services:
       FLUSH_MS: ${FLUSH_MS:-1000}
       BATCH_SIZE: ${BATCH_SIZE:-100}
       MAX_REPLAY: ${MAX_REPLAY:-500}
+      # Off locally: the load generator opens 20,000 connections from one IP.
+      RATE_LIMIT_PUBLIC_CONNECTS: ${RATE_LIMIT_PUBLIC_CONNECTS:-0}
     ulimits:
       nofile: { soft: 200000, hard: 200000 }
     restart: unless-stopped

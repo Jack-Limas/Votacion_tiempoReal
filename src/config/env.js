@@ -57,5 +57,9 @@ export const config = {
   slowHardBytes: positiveInteger(process.env.SLOW_HARD_BYTES, 1024 * 1024, 'SLOW_HARD_BYTES'),
   slowMaxDegradedMs: positiveInteger(process.env.SLOW_MAX_DEGRADED_MS, 30_000, 'SLOW_MAX_DEGRADED_MS'),
   // Polling transport: per-instance cache of a topic snapshot.
-  pollCacheMs: positiveInteger(process.env.POLL_CACHE_MS, 1000, 'POLL_CACHE_MS')
+  pollCacheMs: positiveInteger(process.env.POLL_CACHE_MS, 1000, 'POLL_CACHE_MS'),
+  // New public connections per client IP and window (0 disables it, e.g. for
+  // a load generator that opens thousands of connections from one address).
+  rateLimitWindowMs: positiveInteger(process.env.RATE_LIMIT_WINDOW_MS, 10_000, 'RATE_LIMIT_WINDOW_MS'),
+  rateLimitPublicConnects: Number(process.env.RATE_LIMIT_PUBLIC_CONNECTS ?? 60)
 };
