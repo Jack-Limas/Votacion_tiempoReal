@@ -11,7 +11,8 @@
     "test:integration": "node --test --test-concurrency=1 \"test/integration/*.test.js\"",
     "simulate": "node scripts/simulate-actas.js",
     "load": "node scripts/load.js",
-    "estimate": "node scripts/estimate-messages.js"
+    "estimate": "node scripts/estimate-messages.js",
+    "lint": "eslint ."
   },
   "engines": {
     "node": ">=20"
@@ -25,6 +26,9 @@
     "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "globals": "^15.15.0",
     "nodemon": "^3.1.10",
     "puppeteer-core": "^23.11.1"
   }
