@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coordinator View</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">✓</div><div>Verification<small>Coordinator view</small></div></div>
+    <span class="pill warn" id="conn"><span class="dot"></span>Connecting…</span>
+    <div class="spacer"></div>
+    <div class="who" id="who"></div>
+  </header>
+  <div id="banner" class="banner hidden" role="alert"></div>
+
+  <main>
+    <div class="stats" id="stats"></div>
+    <div class="grid two">
+      <section class="card" aria-labelledby="q-title">
+        <div class="card-head"><h2 id="q-title">Queue</h2><span class="count" id="queue-count">0</span></div>
+        <ul class="queue" id="queue"></ul>
+      </section>
+      <section class="card" aria-labelledby="p-title">
+        <div class="card-head"><h2 id="p-title">Auditors online</h2><span class="count" id="online-count">0</span>
+          <div class="spacer"></div><span class="muted" style="font-size:12px">Presence expires on its own after missed heartbeats</span></div>
+        <div style="overflow-x:auto">
+          <table class="table">
+            <thead><tr><th>Auditor</th><th>Connections</th><th>Current case</th><th>On case</th><th>Worked</th><th>Resolved</th></tr></thead>
+            <tbody id="presence"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+    <div class="footer-meta"><span id="version"></span><span id="updated"></span></div>
+  </main>
+  <script type="module" src="coordinator.js"></script>
+</body>
+</html>
