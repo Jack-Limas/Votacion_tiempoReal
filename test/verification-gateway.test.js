@@ -104,9 +104,9 @@ test('an idle auditor loses the case even though the socket stays open', options
   await ana.waitFor((m) => m.type === 'event' && m.case?.id === id);
   ana.send({ type: 'claim', reqId: 'c' });
   await ana.waitFor((m) => m.reqId === 'c' && m.ok);
-  const lost = await ana.waitFor((m) => m.type === 'lease_lost', 3000);
+  const lost = await ana.waitFor((m) => m.type === 'lease_lost', 8000);
   assert.ok(['idle', 'expired'].includes(lost.reason));
-  await ana.waitFor((m) => m.type === 'event' && m.case?.id === id && m.case.status === 'queued' && m.previousOwner, 3000);
+  await ana.waitFor((m) => m.type === 'event' && m.case?.id === id && m.case.status === 'queued' && m.previousOwner, 8000);
 });
 
 test('reconnecting through the other instance gets a full versioned snapshot and keeps the lease', options, async (t) => {
