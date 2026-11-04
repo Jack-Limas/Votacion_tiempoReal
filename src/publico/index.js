@@ -3,6 +3,7 @@ import { sembrarCatalogo } from './catalogo.js';
 import { crearClaves } from './claves.js';
 import { createFanout } from './fanout.js';
 import { createMetrics, leerMetricasCluster } from './metrics.js';
+import { createResume } from './resume.js';
 import { openSseConnection } from './sse.js';
 import { createStreamReader } from './stream.js';
 import { createTopicRegistry, parseSubscriptions } from './topics.js';
@@ -38,6 +39,7 @@ export function createPublico({ redis, config = defaultConfig, logger = console 
     count: config.streamReadCount,
     logger
   });
+  const resume = createResume({ redis, claves, registry, metrics, maxReplay: config.maxReplay });
   let started = false;
 
   function handleStream(req, res) {
@@ -50,10 +52,12 @@ export function createPublico({ redis, config = defaultConfig, logger = console 
 
     const conn = openSseConnection(req, res, config.instanceId);
     registry.add(conn);
-    for (const { topic } of subscriptions) {
-      registry.subscribe(conn, topic);
-    }
     req.on('close', () => registry.remove(conn));
+    // Snapshot para tópicos sin cursor; replay o snapshot para los que traen uno.
+    resume.reanudar(conn, subscriptions).catch((error) => {
+      logger.error('No se pudo reanudar la conexión SSE:', error);
+      conn.close();
+    });
   }
 
   return {

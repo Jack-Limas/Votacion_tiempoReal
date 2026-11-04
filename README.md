@@ -169,3 +169,21 @@ Cada corrida reinicia los datos y deja `resultados/carga-<modo>-<conexiones>.csv
 | `HEARTBEAT_MS` | 15000 | Comentario SSE para mantener viva la conexión |
 | `EL_RESOLUTION_MS` | 10 | Resolución de `monitorEventLoopDelay` |
 | `METRICS_TTL_S` | 5 | TTL de las métricas publicadas en Redis |
+| `MAX_REPLAY` | 500 | Eventos pendientes máximos para resolver una reconexión con replay |
+
+### Reconexión (RF-6)
+
+El cliente guarda, por tópico, el `upTo` del último mensaje que aplicó y al
+reconectar lo envía: `GET /stream?sub=mun:11@<upTo>,dep@<upTo>`. Un tópico sin
+cursor recibe un snapshot. Con cursor recibe un delta con lo que se perdió
+(replay) o un snapshot si el cursor salió de la retención o hay más de
+`MAX_REPLAY` eventos pendientes. La referencia de cliente está en
+`scripts/lib/cliente-sse.js`.
+
+Prueba A/B: incluida en `npm test` (B se desconecta 30 s). Para forzar el camino
+snapshot:
+
+```bash
+MAXLEN=20 docker compose up -d --force-recreate app && docker compose restart nginx
+AB_ACTAS=250 AB_ESPERADO=snapshot AB_DESCONEXION_MS=10000 node --test test/integration/rf6-reconexion.test.js
+```

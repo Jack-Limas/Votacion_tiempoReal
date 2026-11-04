@@ -10,6 +10,7 @@
 // En ambos modos el costo es O(k) por tópico (k = suscriptores locales), no
 // O(conexiones de la instancia).
 import { compareIds, parseId } from './stream.js';
+import { PENDIENTE } from './topics.js';
 
 // setImmediate cede de verdad: deja correr I/O (sockets, timers) antes de
 // seguir. process.nextTick y las promesas resueltas son microtareas y se
@@ -57,6 +58,11 @@ export function reducirEntradas(entries, topic) {
 // tiene un estado más nuevo que el lector de la instancia.
 export function entregar(conn, topic, upTo, frame) {
   const cursor = conn.cursors.get(topic);
+  if (cursor === PENDIENTE) {
+    // La conexión aún recibe su snapshot/replay: se guarda y se filtra después.
+    conn.pending.push([topic, upTo, frame]);
+    return false;
+  }
   if (cursor && compareIds(upTo, cursor) <= 0) return false;
   conn.cursors.set(topic, upTo);
   conn.send(frame);

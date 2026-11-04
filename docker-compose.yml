@@ -32,6 +32,7 @@ services:
       FANOUT_MODE: ${FANOUT_MODE:-batched}
       FLUSH_MS: ${FLUSH_MS:-1000}
       BATCH_SIZE: ${BATCH_SIZE:-100}
+      MAX_REPLAY: ${MAX_REPLAY:-500}
     ulimits:
       nofile: { soft: 200000, hard: 200000 }
     depends_on:

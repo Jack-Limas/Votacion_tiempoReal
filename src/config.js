@@ -44,5 +44,7 @@ export const config = {
   batchSize: positiveInteger(process.env.BATCH_SIZE, 100, 'BATCH_SIZE'),
   heartbeatMs: positiveInteger(process.env.HEARTBEAT_MS, 15000, 'HEARTBEAT_MS'),
   eventLoopResolutionMs: positiveInteger(process.env.EL_RESOLUTION_MS, 10, 'EL_RESOLUTION_MS'),
-  metricsTtlSeconds: positiveInteger(process.env.METRICS_TTL_S, 5, 'METRICS_TTL_S')
+  metricsTtlSeconds: positiveInteger(process.env.METRICS_TTL_S, 5, 'METRICS_TTL_S'),
+  // RF-6: más de MAX_REPLAY eventos pendientes se resuelven con snapshot.
+  maxReplay: positiveInteger(process.env.MAX_REPLAY, 500, 'MAX_REPLAY')
 };

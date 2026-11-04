@@ -7,6 +7,9 @@ const TOPIC_RE = /^(dep|mun:\d{1,6}|pto:\d{1,6})$/;
 const CURSOR_RE = /^\d{1,20}-\d{1,20}$/;
 const VACIO = new Set();
 
+// Cursor de un tópico cuya reanudación (snapshot o replay) todavía no termina.
+export const PENDIENTE = Symbol('pendiente');
+
 let secuencia = 0;
 
 // La conexión no sabe de transporte: solo expone send(string).

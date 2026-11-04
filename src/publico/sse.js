@@ -14,7 +14,9 @@ export function openSseConnection(req, res, instanceId) {
   req.socket.setKeepAlive(true);
   res.write(': conectado\n\n');
 
-  const conn = createConnection((frame) => res.write(frame));
+  const conn = createConnection((frame) => {
+    if (!res.destroyed) res.write(frame);
+  });
   conn.close = () => res.end();
   return conn;
 }

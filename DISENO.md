@@ -221,3 +221,74 @@ instancia publica `metrics:{instancia}` cada segundo con TTL de 5 s):
   × conexiones de la instancia).
 - Retraso entre la recepción del acta (`ts_recepcion`) y su envío: p50 y p99.
 - Reconexiones resueltas por replay y por snapshot (RF-6).
+
+## 6. RF-6: reconexión con recuperación
+
+**Identificador del cliente:** por cada tópico, el ID del stream (`upTo`) del
+último mensaje que aplicó. El ID lo asigna Redis en el `XADD`, es monótono y es
+el mismo para las 8 instancias. Por eso un cliente puede reconectar en
+cualquiera de ellas.
+
+**Protocolo** (transporte SSE; el cliente maneja la reconexión y no depende de
+la reconexión automática de `EventSource`, porque RF-10 pedirá backoff con
+jitter):
+
+```
+GET /stream?sub=mun:11@1793757239457-0,dep@1793757239457-0,pto:176
+{"t":"snapshot","topic":"pto:176","upTo":"<id>","estado":{...}}          tópico sin cursor
+{"t":"delta","topic":"mun:11","upTo":"<id>","cambios":{...},"motivo":{...}}
+```
+
+**Qué entrega el servidor al reconectar** (`src/publico/resume.js`):
+
+1. La conexión entra al registro **antes** de leer Redis, con cada cursor en
+   `PENDIENTE`. Los deltas en vivo que llegan mientras tanto se guardan y al
+   final se filtran por `upTo > cursor`. Así no se pierde nada entre la lectura
+   y el alta, y nada retrocede.
+2. Tópico sin cursor: **snapshot**. Un script Lua (`src/lua/snapshot.lua`) lee
+   los hashes y el último ID del stream de forma atómica.
+3. Tópico con cursor: en un `MULTI` se leen
+   `XRANGE st:eventos (cursor + COUNT MAX_REPLAY+1`, el primer ID retenido y el
+   último. Luego se decide:
+   - **snapshot** si el cursor es anterior al primer ID retenido (lo que siguió
+     pudo recortarse), si hay más de `MAX_REPLAY` eventos pendientes, o si el
+     cursor es posterior al último ID (stream reiniciado);
+   - **replay** en otro caso: se filtran los eventos del tópico y se reducen a
+     **un** delta (último valor por campo), con `upTo` = último ID y el
+     `motivo` de la corrección que bajó un número, si la hubo.
+
+**Por qué conviene la foto completa a partir de cierto punto:** el replay
+transfiere los eventos pendientes desde Redis (~0,7 KB cada uno) aunque el
+cliente reciba un solo delta. El snapshot cuesta un `HGETALL` de un hash de
+~10 campos. Con `MAX_REPLAY = 500`, el replay cubre más de 1,5 minutos en la
+peor ráfaga (300 actas/min) y unos 5 minutos en el pico normal (~90/min), así
+que una desconexión de 30 s siempre se resuelve con replay. Más allá de eso, la
+foto es más barata.
+
+**Retención, expiración y memoria:**
+
+- `XADD ... MAXLEN ~ N` dentro del mismo script que aplica el acta; `N` se
+  configura con `MAXLEN` (10.000 por defecto). El `~` recorta por nodos
+  completos (100 entradas), así que es O(1) amortizado y el stream puede pasar
+  de N en hasta un nodo.
+- Medido con `MEMORY USAGE`: 3.305 eventos ocupan 2.396.528 bytes, unos **725 B
+  por evento**. La jornada completa (~6.600 eventos con correcciones) ocupa
+  ≈ 4,8 MB, y el tope de 10.000 eventos ≈ 7,3 MB. Es tan barato que se retiene
+  la jornada entera y el snapshot solo aparece por `MAX_REPLAY` o por un
+  stream recortado a propósito.
+- No hay TTL por entrada: `EXPIRE` borraría el stream completo. Tras la
+  jornada se puede expirar la clave operativamente (p. ej. 48 h).
+- Pub/Sub de Redis no se usa para RF-6: no tiene memoria. Si una instancia o
+  un cliente está ausente, lo publicado se pierde. El stream sí la tiene.
+
+**Verificación** (`test/integration/rf6-reconexion.test.js`, contra las 8
+réplicas): A queda conectado; B se desconecta 30 s mientras entran 30 actas y
+una corrección que baja un candidato, y reconecta con sus cursores en otra
+instancia. Al final, los hashes del estado de A y B coinciden en `dep`,
+`mun:7` y `pto:699`.
+
+- Camino **replay** (MAXLEN 10.000): los 3 tópicos se resolvieron por replay y
+  el motivo de la corrección llegó a A en vivo y a B en el replay.
+- Camino **snapshot** (`MAXLEN=20`, 250 actas durante una ausencia de 10 s):
+  el stream quedó en 22 entradas, los 3 tópicos se resolvieron por snapshot
+  (métrica `reconexiones.snapshot = 3`) y los hashes también coincidieron.
