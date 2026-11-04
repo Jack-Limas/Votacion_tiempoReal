@@ -35,6 +35,12 @@ export const app = createApp(idempotencyService, {
   publicDir: fileURLToPath(new URL('../public/', import.meta.url))
 });
 export const server = createServer(app);
+// nginx reuses upstream keep-alive sockets for up to 60 s. Node closing them
+// earlier (default 5 s) races with a request being sent on the same socket,
+// and nginx cannot retry a POST: the jurado would get a 502. Keep them longer
+// than the proxy does.
+server.keepAliveTimeout = 65_000;
+server.headersTimeout = 66_000;
 export const webSocketServer = createWebSocketServer(server, { routes: [verification.upgradeRoute] });
 // /ws carries the public results over WebSocket (transport comparison, RT-5).
 webSocketServer.on('connection', (ws, req) => results.handleWebSocket(ws, req));
@@ -46,7 +52,9 @@ export async function startServer() {
   decisionApplier.start();
   await new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(config.port, config.host, resolve);
+    // A deep accept backlog absorbs reconnection bursts (the default 511
+    // overflowed with ~1,600 simultaneous connects in the load test).
+    server.listen({ port: config.port, host: config.host, backlog: config.listenBacklog }, resolve);
   });
   console.log(`API, WebSocket and SSE ready on ${config.host}:${config.port} (instance ${config.instanceId}).`);
 }

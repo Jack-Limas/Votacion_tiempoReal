@@ -20,6 +20,7 @@ function oneOf(value, allowed, fallback, name) {
 export const config = {
   port: positiveInteger(process.env.PORT, 3000, 'PORT'),
   host: process.env.HOST ?? '0.0.0.0',
+  listenBacklog: positiveInteger(process.env.LISTEN_BACKLOG, 4096, 'LISTEN_BACKLOG'),
   wsPath: process.env.WS_PATH ?? '/ws',
   corsOrigins: (process.env.CORS_ORIGIN ?? '*')
     .split(',')
