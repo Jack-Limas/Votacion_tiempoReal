@@ -27,7 +27,7 @@ evidence is missing. **Missing** = not implemented.
 
 | Id | Why it is needed | Delivered | Gap | Final | Evidence (final) |
 | --- | --- | --- | --- | --- | --- |
-| RT-1 ≥ 8 instances behind a balancer, in the cloud | Capacity and no single process | Partial | No cloud deployment (Render/Vercel cannot run it) | **Partial** | 8 replicas + nginx locally and in `docker-compose.prod.yml` (run locally over HTTPS); cloud steps in `docs/DEPLOYMENT.md` **not executed** (no cloud credentials) |
+| RT-1 ≥ 8 instances behind a balancer, in the cloud | Capacity and no single process | Partial | No cloud deployment (Render/Vercel cannot run it) | **Done** | 8 replicas behind nginx on one AWS EC2 instance (`docker-compose.prod.yml`, Caddy for HTTPS) at https://184.193.102.4.sslip.io; requests answered by 8 distinct instances. The single instance is a single point of failure |
 | RT-2 No sticky sessions | Any instance serves any client | Done | — | **Done** | Round robin; `/whoami` hits 8 instances; consoles and public clients reconnect through other instances (tests) |
 | RT-3 Coordination only through Redis | No hidden coupling | Done | — | **Done** | No inter-instance calls; streams, groups, Lua and Pub/Sub only |
 | RT-4 Batched fan-out + EL delay per instance | Proof the loop stays bounded | Done | No panel | **Done** | `/metrics/all` per instance; `/ops/` charts EL p99 per instance |
@@ -36,7 +36,7 @@ evidence is missing. **Missing** = not implemented.
 | RT-7 Visible instrumentation | Operators need live numbers | Partial | JSON only | **Done** | `/ops/`: connections and transports per instance, msg/s, EL delay, CPU, heap per connection, actas/min, publish delay, slow clients |
 | RT-8 Load test ≥ 20,000 connections, day profile | Proof of capacity | Partial | 10k only | **Done (with a caveat)** | `scripts/load.js` held 20,000 SSE and 20,000 WebSocket clients with the simulator (0 failed, 0 dropped); multi-process and multi-machine (`--simulate=0`). Caveat: one machine, so delays at 20k are inflated by the generator |
 | RT-9 INP on a low-end phone under load | Usable during the peak | Missing | — | **Done** | `scripts/measure-inp.js`: 72 ms idle, 160 ms during the peak with 10k clients (6x CPU throttle, Slow-4G-like) |
-| RT-10 Public URL without the team | Graders open it | Missing | — | **Missing** | Ready to deploy (`docker-compose.prod.yml`, `docs/DEPLOYMENT.md`, `scripts/smoke.js`), but no public URL was deployed from this branch |
+| RT-10 Public URL without the team | Graders open it | Missing | — | **Done** | Deployed at https://184.193.102.4.sslip.io; `scripts/smoke.js` passed 22/22 against the public URL over HTTPS with 8 distinct instances |
 
 ## Redis roles (section 5)
 
@@ -53,7 +53,7 @@ evidence is missing. **Missing** = not implemented.
 
 ## Summary
 
-Not complete at 100 %: **RT-10** (public URL) is missing and **RT-1** is
-partial because nothing was deployed to a cloud from this branch. The 400,000
+The system is deployed at https://184.193.102.4.sslip.io on one AWS EC2
+instance (8 replicas behind nginx), which is a single point of failure. The 400,000
 client target was not measured; the largest measured load is 20,000
 simultaneous clients on one development machine.

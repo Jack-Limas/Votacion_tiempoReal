@@ -6,6 +6,13 @@ follow the totals live, and 120 auditors review doubtful actas. Eight
 stateless Node.js instances behind a load balancer share nothing but Redis
 (Valkey).
 
+**Public URL:** https://184.193.102.4.sslip.io — public results at `/`, jury
+app at `/jury/`, verification consoles at `/verification/`, operations
+dashboard at `/ops/`.
+
+Evaluator credentials were sent privately to the professor. They are not
+stored in this repository.
+
 | Audience | Page | Transport | Guarantee |
 | --- | --- | --- | --- |
 | Jurados (6,400) | `/jury/` | HTTP POST + `idem` + offline outbox (IndexedDB) | An acta counts once; every attempt gets an unambiguous answer |
@@ -163,6 +170,11 @@ system **and** the load generator):
 
 ## Deployment
 
+Deployed at **https://184.193.102.4.sslip.io**: 8 replicas behind nginx on one
+AWS EC2 instance, with Caddy terminating HTTPS. `scripts/smoke.js` passed
+22/22 checks against the public URL over HTTPS, with requests answered by 8
+distinct instances.
+
 One Ubuntu VM on Azure or AWS with `docker-compose.prod.yml`: Caddy with
 automatic HTTPS on `<PUBLIC_IP>.sslip.io`, nginx, 8 replicas and Valkey with
 AOF and a password. Only ports 80 and 443 are public; every secret comes from
@@ -194,10 +206,8 @@ relevant: `REDIS_URL`, `TRUST_PROXY`, `FLUSH_MS`, `BATCH_SIZE`, `MAXLEN`,
   clients on one laptop, where the generator and the system shared the CPU.
   Per-connection heap (≈ 3.4 KB WebSocket) suggests 50,000 clients per instance
   fit in memory, but CPU and latency at that scale are not demonstrated.
-* The cloud deployment steps were written and the production compose was run
-  locally over HTTPS, but no public URL was deployed from this branch (RT-10).
-* Single VM = single point of failure (see above). Valkey runs without
-  replication.
+* The public deployment runs on a single AWS EC2 instance: a single point of
+  failure (see above). Valkey runs without replication.
 * `/ops/` and `/metrics/all` are public; protect them in a real election.
 * The catalog of puestos and mesas is synthetic (deterministic seed).
 * Auditor sign-in uses shared access codes per role exchanged for signed
