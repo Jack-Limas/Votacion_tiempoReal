@@ -1,0 +1,20 @@
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tabs select, .tabs input { width: auto; min-width: 120px; padding: 8px 10px; }
+.tabs input { width: 110px; }
+.inline { display: inline-flex; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.progress-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.progress { height: 8px; border-radius: 6px; background: var(--panel-2); overflow: hidden; margin-bottom: 16px; }
+.progress div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .4s; }
+.candidates { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.candidates li { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: baseline; }
+.candidates .name { font-weight: 600; }
+.candidates .votes { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+.candidates .bar { grid-column: 1 / -1; height: 10px; border-radius: 6px; background: var(--panel-2); overflow: hidden; }
+.candidates .bar div { height: 100%; background: linear-gradient(90deg, #a78bfa, var(--accent-2)); transition: width .4s; }
+.small { font-size: 13px; }
+.notices { margin-top: 16px; }
+.notice-list { list-style: none; margin: 0; padding: 0; }
+.notice-list li { padding: 10px 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.notice-list li:last-child { border-bottom: 0; }
+a { color: #c4b5fd; }

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Preliminary Results</title>
+  <meta name="description" content="Live preliminary count (preconteo) by department, municipality and polling station.">
+  <link rel="stylesheet" href="/assets/base.css">
+  <link rel="stylesheet" href="/results.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">%</div><div>Preliminary count<small>Informative only · official count is manual</small></div></div>
+    <span class="pill warn" id="conn"><span class="dot"></span>Connecting…</span>
+    <div class="spacer"></div>
+    <nav class="tabs" aria-label="Scope">
+      <button class="btn active" data-scope="dep" type="button">Department</button>
+      <label class="inline"><span class="sr-only">Municipality</span>
+        <select id="mun" aria-label="Municipality"></select></label>
+      <label class="inline"><span class="sr-only">Polling station</span>
+        <input id="pto" type="number" min="1" max="1842" inputmode="numeric" placeholder="Station #" aria-label="Polling station number"></label>
+      <button class="btn" id="pto-go" type="button">Go</button>
+    </nav>
+  </header>
+  <div id="banner" class="banner hidden" role="status" aria-live="polite"></div>
+
+  <main>
+    <section class="card" aria-labelledby="scope-title">
+      <div class="card-head">
+        <h2 id="scope-title">Department</h2>
+        <div class="spacer"></div>
+        <span class="muted mono" id="updated"></span>
+      </div>
+      <div class="card-body">
+        <div class="progress-row">
+          <div><b id="reported">0</b> <span class="muted">mesas reported</span></div>
+          <div class="mono" id="percent">0.00 %</div>
+        </div>
+        <div class="progress" aria-hidden="true"><div id="progress-bar"></div></div>
+        <ol class="candidates" id="candidates" aria-live="off"></ol>
+        <p class="muted small" id="empty">Waiting for the first actas…</p>
+      </div>
+    </section>
+
+    <section class="card notices" aria-labelledby="notices-title">
+      <div class="card-head"><h2 id="notices-title">Why numbers changed</h2></div>
+      <ul id="notices" class="notice-list"><li class="muted">Corrections and verified actas will be explained here.</li></ul>
+    </section>
+
+    <div class="footer-meta">
+      <span>Instance <span class="mono" id="instance">–</span></span>
+      <span>Cursor <span class="mono" id="cursor">–</span></span>
+      <span>INP <span class="mono" id="inp">–</span></span>
+      <a href="/jury/">Jury app</a><a href="/verification/">Verification</a><a href="/ops/">Operations</a>
+    </div>
+  </main>
+  <script type="module" src="/results.js"></script>
+</body>
+</html>
