@@ -9,7 +9,12 @@ function createRedisClient(name, options) {
   return client;
 }
 
-export const redisClient = createRedisClient('commands', { url: config.redisUrl });
+// Commands fail fast while Redis is unreachable instead of waiting in an
+// offline queue, so callers can answer 503 instead of hanging silently.
+export const redisClient = createRedisClient('commands', {
+  url: config.redisUrl,
+  disableOfflineQueue: true
+});
 export const redisSubClient = createRedisClient('subscriber', { url: config.redisUrl });
 export const redisPubClient = createRedisClient('publisher', { url: config.redisUrl });
 

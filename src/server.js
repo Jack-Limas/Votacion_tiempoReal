@@ -5,17 +5,29 @@ import { config } from './config.js';
 import {
   closeRedisClients,
   connectRedisClients,
-  redisClient
+  redisClient,
+  redisSubClient
 } from './config/redis.js';
 import { createIdempotencyService } from './services/idempotencyService.js';
 import { createWebSocketServer } from './sockets/index.js';
+import { createVerificationModule } from './verification/index.js';
 
-export const app = createApp(createIdempotencyService(redisClient));
+export const verification = createVerificationModule({
+  redis: redisClient,
+  subscriber: redisSubClient
+});
+export const app = createApp(createIdempotencyService(redisClient), {
+  routers: [verification.router],
+  actaMiddleware: [verification.actaRateLimiter]
+});
 export const server = createServer(app);
-export const webSocketServer = createWebSocketServer(server);
+export const webSocketServer = createWebSocketServer(server, {
+  routes: [verification.upgradeRoute]
+});
 
 export async function startServer() {
   await connectRedisClients();
+  await verification.start();
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(config.port, config.host, resolve);
@@ -24,6 +36,9 @@ export async function startServer() {
 }
 
 export async function stopServer() {
+  await verification.stop().catch((error) => {
+    console.error('Error stopping the verification module:', error);
+  });
   for (const socket of webSocketServer.clients) {
     socket.terminate();
   }
