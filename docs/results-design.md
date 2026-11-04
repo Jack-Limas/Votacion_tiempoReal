@@ -1,294 +1,238 @@
-# Diseño del módulo público (RF-4, RF-5, RF-6)
+# Results module design (RF-1 to RF-6, RF-9, RF-10 for the public)
 
-Este documento cubre la difusión de results al público: el backplane en Redis,
-la suscripción por tópico, el envío por lotes y la reconexión con recuperación.
-Las cifras salen de las pruebas incluidas en el repositorio (ver README).
+Intake of actas, hierarchical totals, the backplane to the 8 instances, the
+public fan-out and its failure modes. Code: `src/lua/applyActa.lua`,
+`src/services/`, `src/results/`. Measurements: `results/README.md`.
 
-## 1. Arquitectura
-
-```
- jurado ──POST /api/actas──► instancia k ──EVAL aplicarActa.lua──► Valkey
-                                              │  idempotencia (RF-1, Edison)
-                                              │  acc:mesa / acc:pto / acc:mun / acc:dep
-                                              └─ XADD st:eventos  (mismo script: atómico)
-
- Valkey st:eventos ──XREAD BLOCK (conexión dedicada, sin grupos)──► cada una de las 8 instancias
-                                                                      │
-                                       registro de tópicos (Map<topic, Set<conexión>>)
-                                                                      │
-                                                         SSE  GET /stream?sub=...
-```
-
-- **Transporte público: SSE.** El público solo recibe; SSE es HTTP plano, pasa
-  por el balanceador y los proxies sin negociar upgrade y cuesta menos memoria
-  por conexión que un WebSocket. La capa de fan-out es agnóstica al transporte:
-  cada conexión expone solo `send(string)` (`src/publico/sse.js` la adapta).
-- **Sin estado compartido fuera de Redis.** Cada instancia guarda únicamente
-  sus conexiones locales. Las instancias no se hablan entre sí.
-
-## 2. Decisiones tomadas (lo que el enunciado no fijaba)
-
-- **Script Lua.** Edison ya tenía el script de recepción (idempotencia +
-  acumulado `aggregate`). Se movió sin cambios de lógica a
-  `src/lua/aplicarActa.lua` y se le agregó, en el mismo script, la
-  actualización de `acc:mesa:{id}`, `acc:pto:{id}`, `acc:mun:{id}`, `acc:dep` y
-  el `XADD` a `st:eventos`. Es un stub mínimo de RF-2/RF-3: la versión mayor
-  gana y una versión nueva revierte la anterior por diferencia. El hash
-  `aggregate` de Edison se mantiene tal cual (no revierte correcciones; queda
-  para quien implemente RF-2).
-- **Nombres de claves.** Se conserva el prefijo de Edison con hash tag
-  (`electoral:{results}:`), así que `st:eventos` es
-  `electoral:{results}:st:eventos` y `acc:mun:11` es
-  `electoral:{results}:acc:mun:11`. Todas las claves que toca el script caen en
-  el mismo slot, de modo que el script sigue siendo válido en Redis Cluster.
-- **Porcentaje de mesas informadas.** Requiere el total de mesas por tópico.
-  Se usa un catálogo sintético determinista (`src/publico/catalogo.js`: 40
-  municipios, 1.842 puestos, 6.400 mesas) que cada instancia siembra al
-  arrancar en el hash `catalogo`. Se guarda con dos decimales como texto para
-  que el hash y el evento lleven exactamente el mismo número.
-- **Campos del estado.** `v:<candidato>`, `mesas_informadas` y `porcentaje`. El
-  prefijo `v:` evita choques entre un candidato y los demás campos.
-- **Primera lectura del stream.** `XREAD ... $` con `BLOCK 0` solo la primera
-  vez; después siempre el último ID recibido. Bloquear sin límite en la primera
-  lectura evita tener que repetir `$` tras un timeout, que perdería los eventos
-  llegados entre una lectura y otra.
-- **Valkey con AOF** (`--appendonly yes --appendfsync everysec`, igual que la
-  configuración de Redis del módulo de verificación) en un solo compose con las
-  8 réplicas. En producción (ElastiCache) se usa AOF/réplica.
-
-## 3. Backplane: un stream global contra uno por municipio
-
-Se usa **un solo stream `st:eventos`**. Cada instancia lee todos los eventos y
-solo paga el fan-out de sus suscriptores locales.
-
-| | Stream global | Un stream por municipio (40) | Uno por puesto (1.842) |
-|---|---|---|---|
-| Eventos escritos en la jornada | ~6.600 (6.400 actas + ~180 correcciones) | ~6.600 × 2 (municipio + departamento) | ~6.600 × 3 |
-| Streams que lee cada instancia | 1 | 40 + dep | 1.842 + 40 + dep |
-| Entregas Redis → instancias | 6.600 × 8 = 52.800 | igual o mayor (ver abajo) | igual o mayor |
-| Tráfico Redis → instancias (≈0,6 KB/evento) | ≈32 MB en 2 h; pico ≈ 5 ev/s × 8 × 0,6 KB ≈ 24 KB/s | ≥ 32 MB | ≥ 32 MB |
-| Cursor de reconexión | un ID monótono para todos los tópicos | un cursor por stream | un cursor por stream |
-
-El argumento central: **sin sesiones pegajosas, cada instancia recibe una
-muestra aleatoria de todo el público**. Con ~50.000 clientes por instancia
-repartidos en 40 municipios, la probabilidad de que una instancia no tenga
-ningún suscriptor de un municipio es prácticamente cero, así que con streams
-por municipio cada instancia terminaría leyendo los 40 de todas formas. Además
-el tópico `dep` necesita todos los eventos. Partir el canal no ahorra tráfico,
-multiplica la memoria (cada acta escrita en 2 o 3 streams) y obliga a manejar
-un cursor por stream en RF-6. El flujo de escritura es pequeño (≈ 7.000
-eventos); lo caro es el fan-out hacia el público, y ese ya es proporcional a los
-suscriptores locales.
-
-El evento lleva **valores absolutos nuevos** (no incrementos) de mesa, puesto,
-municipio y departamento, más `acta`, `version`, `tipo` (`nueva|correccion`),
-`ts_recepcion` y `baja` (si alguna cifra bajó). Con valores absolutos, aplicar
-un evento dos veces o reducir varios eventos a "último valor por campo" da el
-mismo resultado, que es lo que hacen la agregación por ventana y el replay.
-
-## 4. RF-5: registro de tópicos
-
-Tópicos: `dep`, `mun:{id}`, `pto:{id}`. Una conexión puede seguir varios
-(`GET /stream?sub=mun:11,dep`).
+## 1. Data flow
 
 ```
-topics: Map<topic, Set<conexión>>
-conexión: { send(string), topics: Set<topic>, cursors: Map<topic, id> }
+ jurado ─POST /api/actas─► instance k ─EVAL applyActa.lua─► Valkey  (one atomic script)
+                                          │ idem record (RF-1)
+                                          │ acc:mesa / acc:pto / acc:mun / acc:dep  + rank:* ZSETs (RF-2, RF-3)
+                                          │ XADD st:events                          (backplane + history, RF-6)
+                                          └ XADD verification (doubtful actas → RF-7)
+
+ Valkey st:events ─XREAD BLOCK (dedicated connection, no group)─► each of the 8 instances
+                                                                    │ topic registry Map<topic, Set<conn>>
+                                                                    │ window aggregation + batched sends
+                                                                    ▼
+                                    WebSocket /ws?sub=…  (default) · SSE /stream?sub=…  · GET /api/results/:topic
 ```
 
-| Operación | Costo | Cómo |
-|---|---|---|
-| Alta (suscribir a un tópico) | O(1) | `Map.get` + `Set.add` |
-| Baja de un tópico | O(1) | `Set.delete`; si el set queda vacío se borra la entrada del mapa |
-| Baja de la conexión completa | O(t), t = tópicos de la conexión (≤ 10) | recorre `conn.topics` |
-| Recorrido para entregar un evento | O(k), k = suscriptores del tópico | itera solo `topics.get(topic)` |
+Instances keep only their local connections. They never talk to each other
+(RT-3): the stream is the only path between them.
 
-Nunca se recorren todas las conexiones de la instancia para entregar un
-evento. Un evento toca a lo sumo 3 tópicos (su puesto, su municipio y `dep`);
-un tópico sin suscriptores locales cuesta un `Map.get`. Al cerrarse la conexión
-(`req.on('close')`) se da de baja de todos sus tópicos y el contador de
-suscriptores de `/metrics` vuelve a 0.
+## 2. Atomic registration (RF-1, RF-2, RF-3)
 
-Verificación (prueba `test/integration/rf5-topicos.test.js`, contra las 8
-réplicas): un cliente en `mun:11` recibe solo mensajes de `mun:11` y uno en
-`pto:176` solo de `pto:176`; al desconectarse, ambos desaparecen del mapa; 16
-peticiones a `/whoami` respondieron 8 instancias distintas.
+`applyActa.lua` runs as one Redis script, so no other command interleaves:
 
-## 5. RF-4: agregación por ventana y envío por lotes
+1. **Idempotency.** `idem:<key>` stores the digest of the request and the
+   answer. A resend with the same content gets the stored answer with
+   `duplicate: true` (`200`), never a second sum; the same key with other
+   content gets `409`. If the server dies after the script but before
+   answering, the jurado's outbox resends the same `idem` and receives the
+   stored answer.
+2. **Convergence.** Per mesa the applied acta is the maximum by
+   `(version, content digest)` where the content digest covers `votos` and
+   `sufragantes`. That order is total and independent of arrival order, so the
+   totals depend only on the **set** of actas received (tested with all 24
+   arrival orders of v1, v2, a different v2 and v3). A late v2 after v3 is
+   answered `superseded` and changes nothing. A resend whose `idem` key already
+   expired is also `superseded` (its version/content is not greater), so the
+   TTL of the idem key is not a safety limit.
+3. **Hierarchical totals.** A newer acta computes per-candidate differences
+   against the previous figures of the mesa and applies them with `HINCRBY` to
+   puesto, municipality and department, plus `ZINCRBY` on `rank:{topic}`
+   (ranking with `ZREVRANGE`, O(log C + k), without reading every candidate).
+   `mesas_reported` and `percent_reported` change only for the first acta of a
+   mesa. A client never sees a municipality total that includes an acta its
+   puesto does not show yet, because all levels change inside the same script
+   and every read (snapshot script, stream event) happens before or after it.
+   Several commands sent from Node would interleave with other instances'
+   commands and expose half-applied states; `MULTI` cannot branch on values read
+   inside the transaction.
+4. **Event.** `XADD st:events MAXLEN ~ N` with the **new absolute values** of
+   every changed level, in the same script: state and event are atomic.
 
-`src/publico/fanout.js`, modo `FANOUT_MODE=batched` (por defecto):
+The old `aggregate` hash of the delivered version was removed: it added every
+accepted acta, including superseded versions and corrections.
 
-1. Los eventos del stream **no se envían al llegar**. Se acumulan en un mapa de
-   tópicos sucios: por tópico, el último valor absoluto de cada campo que
-   cambió, el `motivo` (si una corrección bajó un número) y `upTo`, el último
-   ID del stream procesado. Un tópico sin suscriptores locales se ignora.
-2. Cada `FLUSH_MS` (1000 ms) se arma **un mensaje por tópico sucio**, solo con
-   los campos que cambiaron, y se **serializa una vez**: todos los suscriptores
-   reciben el mismo string.
-3. Se envía en lotes de `BATCH_SIZE` y entre lotes se cede el Event Loop con
-   `await new Promise(r => setImmediate(r))`.
-4. Los flushes no se solapan: si toca uno mientras el anterior sigue enviando,
-   la ventana nueva sigue acumulando y se envía, fusionada, al terminar.
-5. Cada conexión descarta los deltas con `upTo <= cursor` de ese tópico. Los
-   IDs se comparan como números (ms y secuencia): como texto, `9-0 > 10-0`.
-6. Una corrección que baja un número viaja con
-   `motivo: {tipo:"correccion", acta, version}` para que la UI lo explique.
+## 3. Verified doubtful actas
 
-`FANOUT_MODE=naive` envía cada evento a cada suscriptor en un bucle síncrono.
-Solo existe para la comparación.
+A doubtful acta (sum ≠ `sufragantes`) is not summed; it is queued for RF-7.
+The auditor's decision is written by the verification `RESOLVE` script to the
+`resolutions` stream with its fencing token. A consumer group in every
+instance applies it through the same `applyActa.lua`:
 
-### Por qué setImmediate
+* `approve`: added once with the usual version rules; the event carries
+  `origin: 'approve'` and the public receives `reason: {type: 'verification'}`.
+* `reject`: not counted; the mesa stays unreported until the jurado sends a
+  new version.
+* `recount`: as reject, flagged for a physical recount.
 
-`process.nextTick` y las promesas resueltas son **microtareas**: se ejecutan
-todas antes de que el Event Loop vuelva a la fase de I/O, así que un bucle que
-"cede" con ellas sigue bloqueando sockets, timers y las peticiones de los
-jurados. `setImmediate` programa la continuación en la fase *check*, después del
-*poll* de I/O. Entre dos lotes alcanzan a correr las peticiones pendientes. La
-prueba unitaria `cede el Event Loop entre lotes` lo verifica: un callback
-programado con `setImmediate` corre justo después del primer lote.
+Idempotent per `(case, token)`; a token lower than the last one seen for the
+case is refused (`stale_token`). The two writes are in different hash slots
+(`{verification}`, `{results}`), so they cannot be one Lua script on Redis
+Cluster; the stream plus the idempotent apply gives the same exactly-once
+effect. The jurado reads the outcome at `GET /api/actas/:idem`.
 
-### BATCH_SIZE = 100
+## 4. Backplane: one global stream
 
-Con 500 por lote, cada lote tardó ~40 ms en este equipo (las 8 réplicas, nginx
-y el generador compiten por la misma VM de Docker). Con 100, el p99 por segundo
-quedó por debajo de 20 ms. Ceder más seguido cuesta poco: un `setImmediate` por
-cada 100 envíos.
+| | One global stream | One stream per municipality (40) | One per puesto (1,842) |
+| --- | --- | --- | --- |
+| Events written in the day | ≈ 6,600 | ≈ 6,600 × 2 (municipality + department) | ≈ 6,600 × 3 |
+| Streams each instance reads | 1 | 40 + dep | 1,842 + 40 + dep |
+| Redis → instances deliveries | 6,600 × 8 = 52,800 | same or more | same or more |
+| Reconnection cursor | one monotonic ID for every topic | one per stream | one per stream |
 
-### Medición (prueba de carga, `scripts/carga.js`)
+Without sticky sessions each instance gets a random sample of the whole
+public. With ~50,000 clients per instance spread over 40 municipalities, every
+instance has subscribers of every municipality, so per-municipality streams
+would be read by everyone anyway; and `dep` needs every event. Splitting saves
+no traffic, multiplies memory (each acta in 2–3 streams) and needs one cursor
+per stream for RF-6. The write flow is small; what is expensive is the fan-out
+to the public, which is already proportional to local subscribers.
 
-10.000 conexiones SSE a través de nginx; simulador de los primeros 40 minutos
-de la jornada comprimidos x30 (3.817 envíos: 3.305 actas que generan evento,
-57 de ellas correcciones; además 240 reenvíos y 272 dudosas). Mezcla de
-suscripciones: 50% `dep`, 35% municipio, 15% puesto. CSV por segundo e
-instancia en `results/`.
+## 5. Topic registry (RF-5)
 
-| | naive | batched (BATCH_SIZE=100) |
-|---|---|---|
-| Conexiones | 10.000 (1.250 por instancia) | 10.000 (≈3.330 en 3 instancias*) |
-| Retraso del Event Loop, p99 desde el arranque | 483–685 ms | 1,2–6,8 ms |
-| Retraso del Event Loop, máx | 0,9–1,9 s | 26–88 ms |
-| p99 por segundo (mediana / p99 / máx de los segundos) | 293 / 1.229 / 1.229 ms | 0,96 / 11,7 / 18 ms |
-| Envíos de jurados fallidos durante la prueba | 22 | 0 |
-| Mensajes emitidos | 19.335.972 | 591.846 |
-| Cifra ingenua de la prueba (actas × conexiones) | 32.850.000 | 33.050.000 |
-| Retraso recepción → publicación p50 / p99 | 327–589 / 1.008–1.798 ms | 486–641 / 990–1.170 ms |
+Topics: `dep`, `mun:{id}`, `pto:{id}`; up to `MAX_TOPICS` per connection.
 
-\* Tras recrear las réplicas, nginx tenía la lista de IPs desactualizada y
-concentró las conexiones en 3 instancias, que soportaron 2,7 veces más carga
-que en naive y aun así quedaron por debajo de 20 ms de p99. Antes de una
-corrida conviene `docker compose restart nginx`.
+| Operation | Cost |
+| --- | --- |
+| Subscribe | O(1) (`Map.get` + `Set.add`) |
+| Unsubscribe one topic | O(1); the empty set is deleted |
+| Remove a connection | O(t), t = its topics |
+| Deliver an event | O(k), k = subscribers of the topic; a topic without local subscribers costs one `Map.get` |
 
-En naive el p99 por segundo sale de solo 12 muestras: las mismas instancias
-bloqueadas tardaban en responder `/metrics`. El retraso de publicación de
-batched (~0,5 s de mediana) es el costo esperado de una ventana de 1 s.
+Delivering never walks all the connections of the instance.
 
-### Mensajes emitidos frente a los 2.560 millones
+## 6. Fan-out without blocking the Event Loop (RF-4)
 
-- **Prueba de carga:** 591.846 mensajes frente a 33.050.000 ingenuos (56 veces
-  menos). La compresión x30 del tiempo infla esta reducción, porque una ventana
-  de 1 s junta 30 veces más actas que en tiempo real.
-- **Jornada completa en tiempo real** (`npm run estimar`): plan del simulador,
-  400.000 clientes conectados las 2 h, suscriptores repartidos según las mesas.
-  La cifra ingenua del caso es 6.400 × 400.000 = **2.560.000.000**.
+`FANOUT_MODE=batched` (default):
 
-| Mezcla de suscripciones | FLUSH_MS | Por evento con tópicos | Agregado por ventana | Frente a 2.560 M |
-|---|---|---|---|---|
-| 50% dep, 35% mun, 15% pto | 1000 | 1.379 M | 879 M | 34% (3x menos) |
-| 50% dep, 35% mun, 15% pto | 2000 | 1.379 M | 652 M | 25% (4x) |
-| 10% dep, 60% mun, 30% pto | 1000 | 528 M | 368 M | 14% (7x) |
-| 10% dep, 60% mun, 30% pto | 2000 | 528 M | 287 M | 11% (9x) |
-| 0% dep, 70% mun, 30% pto | 1000 | 333 M | 253 M | 10% (10x) |
+1. Events are folded into a map of dirty topics (last absolute value per
+   field, plus the reason of a correction or verification).
+2. Every `FLUSH_MS` (1 s) one message per dirty topic is built and serialized
+   **once** (`{json, sse}`); every subscriber gets the same string.
+3. Sends go in batches of `BATCH_SIZE` (100) with `await setImmediate`
+   between batches. `process.nextTick` and resolved promises are microtasks
+   and would yield nothing; `setImmediate` lets pending I/O (sockets, the
+   jurados' requests) run between batches.
+4. Flushes never overlap; a connection drops deltas with `upTo <= cursor`.
 
-La mayor parte de la reducción la aporta el tópico (RF-5). La ventana agrega
-poco para `dep` y para la capital (`mun:1`, un tercio de las mesas), porque en
-el pico cambian casi cada segundo y sus suscriptores reciben ~1 mensaje por
-segundo. Para bajar más hay que alargar la ventana de esos tópicos (el caso
-dice que el usuario no distingue una actualización por acta de una cada 2 s).
+`FANOUT_MODE=naive` sends each event to each subscriber synchronously; it
+exists only for the comparison. Delivered-version run with 10,000 SSE clients
+(`results/archive/`): naive p99 event-loop delay 483–685 ms per instance and 22
+failed jurado submissions; batched 1.2–6.8 ms and 0 failures; 19.3 M vs 0.59 M
+messages.
 
-### Métricas
+**Against the 2,560 million naive messages** (`npm run estimate`, 400,000
+clients connected the whole day, subscribers spread by mesas): with 50 % dep /
+35 % municipality / 15 % puesto and a 1 s window the day needs ≈ 879 M messages
+(34 % of naive); with a 2 s window ≈ 652 M (25 %); with 10 % dep / 60 % mun /
+30 % pto and 2 s ≈ 287 M (11 %). Most of the reduction comes from topics; the
+window helps little for `dep` and the capital, which change every second at the
+peak. In the measured runs the reduction was 42x (SSE 20k), 22x (WS 20k, slower
+simulation) and 56x (WS 10k) against "every event to every connection".
 
-`GET /metrics` (instancia) y `GET /metrics/all` (todas, leídas de Redis: cada
-instancia publica `metrics:{instancia}` cada segundo con TTL de 5 s):
+## 7. Continuity on reconnection (RF-6)
 
-- Retraso del Event Loop (`monitorEventLoopDelay`, resolución 10 ms): p50, p99
-  y máx del último segundo y desde el arranque. Se resta la resolución porque
-  el histograma registra el intervalo completo entre disparos. `reset()`
-  descarta la primera muestra siguiente, así que el reinicio por segundo está
-  desfasado medio `FLUSH_MS` del flush y hay un segundo histograma que nunca se
-  reinicia.
-- Conexiones por instancia y suscriptores por tópico.
-- Mensajes emitidos por segundo y total, frente a la cifra ingenua (cada evento
-  × conexiones de la instancia).
-- Retraso entre la recepción del acta (`ts_recepcion`) y su envío: p50 y p99.
-- Reconexiones resueltas por replay y por snapshot (RF-6).
+The client keeps, per topic, the stream ID (`upTo`) of the last message it
+applied. The ID is assigned by Redis in `XADD`, is monotonic and identical on
+every instance, so the client can reconnect anywhere:
+`/ws?sub=mun:11@<upTo>,dep@<upTo>` (or `/stream?sub=…`).
 
-## 6. RF-6: reconexión con recuperación
+The connection joins the registry before reading Redis with its cursor set to
+`PENDING`; live deltas arriving meanwhile are kept and filtered by `upTo`. Then:
 
-**Identificador del cliente:** por cada tópico, el ID del stream (`upTo`) del
-último mensaje que aplicó. El ID lo asigna Redis en el `XADD`, es monótono y es
-el mismo para las 8 instancias. Por eso un cliente puede reconectar en
-cualquiera de ellas.
+* no cursor → **snapshot** (atomic script: hashes + last stream ID);
+* cursor older than the first retained ID, newer than the last one (stream
+  reset) or more than `MAX_REPLAY` (500) pending events → **snapshot**;
+* otherwise **replay**: `XRANGE (cursor +` filtered by topic and reduced to one
+  delta (last value per field, keeping the reason).
 
-**Protocolo** (transporte SSE; el cliente maneja la reconexión y no depende de
-la reconexión automática de `EventSource`, porque RF-10 pedirá backoff con
-jitter):
+Replay transfers every pending event (~0.7 KB each) even if the client gets one
+delta; a snapshot is one `HGETALL` of ~10 fields. With `MAX_REPLAY = 500`,
+replay covers more than 1.5 minutes of the worst burst (300 actas/min), so a 30 s
+disconnection is always a replay.
 
-```
-GET /stream?sub=mun:11@1793757239457-0,dep@1793757239457-0,pto:176
-{"t":"snapshot","topic":"pto:176","upTo":"<id>","estado":{...}}          tópico sin cursor
-{"t":"delta","topic":"mun:11","upTo":"<id>","cambios":{...},"motivo":{...}}
-```
+**Retention and memory.** `XADD … MAXLEN ~ 10000` inside the apply script
+(`~` trims whole nodes, O(1) amortised). Measured with `MEMORY USAGE`: 3,305
+events = 2,396,528 bytes ≈ 725 B/event, so the whole day (~6,600 events)
+≈ 4.8 MB and the cap ≈ 7.3 MB: the whole day is retained. Classic Pub/Sub is not
+used for RF-6: it has no memory.
 
-**Qué entrega el servidor al reconectar** (`src/publico/resume.js`):
+Tested (`test/integration/rf6-reconnection.test.js`, through the 8 replicas): B
+disconnects 30 s while 30 actas and a lowering correction arrive, reconnects on
+another instance and ends with the same state hash as A, which never
+disconnected; also with `MAXLEN=20` (snapshot path).
 
-1. La conexión entra al registro **antes** de leer Redis, con cada cursor en
-   `PENDIENTE`. Los deltas en vivo que llegan mientras tanto se guardan y al
-   final se filtran por `upTo > cursor`. Así no se pierde nada entre la lectura
-   y el alta, y nada retrocede.
-2. Tópico sin cursor: **snapshot**. Un script Lua (`src/lua/snapshot.lua`) lee
-   los hashes y el último ID del stream de forma atómica.
-3. Tópico con cursor: en un `MULTI` se leen
-   `XRANGE st:eventos (cursor + COUNT MAX_REPLAY+1`, el primer ID retenido y el
-   último. Luego se decide:
-   - **snapshot** si el cursor es anterior al primer ID retenido (lo que siguió
-     pudo recortarse), si hay más de `MAX_REPLAY` eventos pendientes, o si el
-     cursor es posterior al último ID (stream reiniciado);
-   - **replay** en otro caso: se filtran los eventos del tópico y se reducen a
-     **un** delta (último valor por campo), con `upTo` = último ID y el
-     `motivo` de la corrección que bajó un número, si la hubo.
+## 8. Transports (RT-5) — chosen by measurement
 
-**Por qué conviene la foto completa a partir de cierto punto:** el replay
-transfiere los eventos pendientes desde Redis (~0,7 KB cada uno) aunque el
-cliente reciba un solo delta. El snapshot cuesta un `HGETALL` de un hash de
-~10 campos. Con `MAX_REPLAY = 500`, el replay cubre más de 1,5 minutos en la
-peor ráfaga (300 actas/min) y unos 5 minutos en el pico normal (~90/min), así
-que una desconexión de 30 s siempre se resuelve con replay. Más allá de eso, la
-foto es más barata.
+| Audience | Transport | Why (measured, `results/README.md`) |
+| --- | --- | --- |
+| Public | **WebSocket**, SSE fallback | Same frames over both. In two runs of 3,000 clients WebSocket had lower latency and equal or lower CPU, and half the server heap per connection (3.4 KB vs 6.2 KB after forced GC). The page falls back to SSE if the upgrade fails twice. Polling cost ~3x CPU per instance with ~10x latency and skipped half the states. |
+| Jurados | HTTP POST + `idem` + IndexedDB outbox | Every attempt is independent and survives a flaky mobile network; no connection to keep alive. |
+| Auditors | WebSocket (`/ws/verification`) | Bidirectional commands with live locks (see `docs/verification.md`). |
+| Operators | Polling `/metrics/all` (1 s) | A few readers of an aggregate that changes once per second. |
 
-**Retención, expiración y memoria:**
+## 9. Slow clients and back-pressure (RF-9)
 
-- `XADD ... MAXLEN ~ N` dentro del mismo script que aplica el acta; `N` se
-  configura con `MAXLEN` (10.000 por defecto). El `~` recorta por nodos
-  completos (100 entradas), así que es O(1) amortizado y el stream puede pasar
-  de N en hasta un nodo.
-- Medido con `MEMORY USAGE`: 3.305 eventos ocupan 2.396.528 bytes, unos **725 B
-  por evento**. La jornada completa (~6.600 eventos con correcciones) ocupa
-  ≈ 4,8 MB, y el tope de 10.000 eventos ≈ 7,3 MB. Es tan barato que se retiene
-  la jornada entera y el snapshot solo aparece por `MAX_REPLAY` o por un
-  stream recortado a propósito.
-- No hay TTL por entrada: `EXPIRE` borraría el stream completo. Tras la
-  jornada se puede expirar la clave operativamente (p. ej. 48 h).
-- Pub/Sub de Redis no se usa para RF-6: no tiene memoria. Si una instancia o
-  un cliente está ausente, lo publicado se pierde. El stream sí la tiene.
+Each delivery checks the connection's pending bytes (`res.writableLength` for
+SSE, `ws.bufferedAmount` for WebSocket):
 
-**Verificación** (`test/integration/rf6-reconexion.test.js`, contra las 8
-réplicas): A queda conectado; B se desconecta 30 s mientras entran 30 actas y
-una corrección que baja un candidato, y reconecta con sus cursores en otra
-instancia. Al final, los hashes del estado de A y B coinciden en `dep`,
-`mun:7` y `pto:699`.
+* below `SLOW_SOFT_BYTES` (256 KB): normal;
+* above it: the connection is **degraded**: no more detail, its cursors stop;
+* once it drains below a quarter of the threshold: **one snapshot** of its
+  topics replaces everything it missed;
+* above `SLOW_HARD_BYTES` (1 MB), or still degraded after
+  `SLOW_MAX_DEGRADED_MS` (30 s): **disconnected** with a reconnect signal
+  (`{t:'reconnect'}` on SSE, close code 4008 on WebSocket); it comes back with
+  its cursors. The time limit matters: a degraded client gets no more data, so
+  a client that never reads would otherwise pin its backlog forever.
 
-- Camino **replay** (MAXLEN 10.000): los 3 tópicos se resolvieron por replay y
-  el motivo de la corrección llegó a A en vivo y a B en el replay.
-- Camino **snapshot** (`MAXLEN=20`, 250 actas durante una ausencia de 10 s):
-  el stream quedó en 22 entradas, los 3 tópicos se resolvieron por snapshot
-  (métrica `reconexiones.snapshot = 3`) y los hashes también coincidieron.
+Demonstrated with a TCP client that stops reading
+(`test/integration/rf9-slow-client.test.js`): only that client is degraded, the
+fast one keeps receiving, and after resuming the slow one gets one snapshot
+equal to the fast client's state; a client that never drains is disconnected
+with the signal. On Windows loopback the kernel absorbed ~64 MB before Node's
+buffer grew, so the thresholds act late on a local socket; over a real mobile
+network the kernel buffers are far smaller.
+
+## 10. Degradation and dead instances (RF-10)
+
+* **Redis down.** The command client has `disableOfflineQueue`, so calls fail
+  at once: jurados get `503 retryable` in tens of milliseconds and their outbox
+  keeps the acta; the stream reader reports `down` and every public client gets
+  `{t:'status', redis:'down'}` (the page says it shows the last confirmed
+  numbers); polling answers `503`; auditor consoles show the degraded banner.
+  When Redis returns, the reader resumes from its last ID (nothing lost),
+  clients get `status: up`, and the retried acta is applied once. Tested with a
+  proxy cut in `test/integration/rf10-degraded.test.js`.
+* **Instance death.** A killed container sends no FIN/RST. The server sends a
+  heartbeat frame every 10 s, clients reconnect after 25 s of silence, and
+  nginx closes `/stream` after 30 s (`/ws` after 60 s) without upstream bytes.
+* **Reconnection avalanche.** Clients use exponential backoff with full jitter
+  and a 4 s first window (`public/assets/backoff.js`). Measured with 8,000
+  clients and one killed instance holding 1,000 of them: peak attempts 512/s
+  (immediate retry), 576/s (fixed 1 s), 284/s (jitter); all reconnected to the
+  remaining 7 instances. A 500 ms first window concentrated the herd (945/s),
+  so the first window must scale with the herd size. Chart:
+  `results/avalanche.svg`.
+* **Connection bursts.** The 20,000-client run exposed Node's default accept
+  backlog (511) and nginx's `max_fails=1`, which together emptied the upstream
+  pool ("no live upstreams"), and a keep-alive race that returned 502 to some
+  POSTs. Fixed with a 4096 backlog, `max_fails=3 fail_timeout=5s`, a 5 s
+  connect timeout and a 65 s Node keep-alive.
+
+## 11. Metrics (RT-4, RT-7)
+
+`GET /metrics` (instance) and `GET /metrics/all` (every instance, read from
+Redis: each publishes `metrics:{instance}` every second with a 5 s TTL):
+connections per transport, messages per second and total vs naive, event-loop
+delay (p50/p99/max of the last second and since start, `monitorEventLoopDelay`
+with 10 ms resolution subtracted), CPU %, heap and heap per connection, events
+applied in the last minute (actas/min), publish delay receivedAt → sent
+(p50/p99), reconnections by path (replay/snapshot/initial/recovery),
+slow-client counters and Redis status. `/ops/` draws them.
