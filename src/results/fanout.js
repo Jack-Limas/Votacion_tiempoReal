@@ -18,8 +18,11 @@ import { PENDING } from './topics.js';
 // run before returning to the Event Loop, so they would yield nothing.
 export const yieldToLoop = () => new Promise((resolve) => setImmediate(resolve));
 
+// A frame is serialized ONCE and shared by every subscriber; each transport
+// picks its encoding (SSE text event or plain JSON for WebSocket).
 export function serialize(message) {
-  return `data: ${JSON.stringify(message)}\n\n`;
+  const json = JSON.stringify(message);
+  return { json, sse: `data: ${json}\n\n` };
 }
 
 export function deltaMessage(topic, upTo, changes, reason) {
@@ -62,7 +65,9 @@ export function reduceEntries(entries, topic) {
 // Delivers an already serialized frame if it advances the connection cursor
 // for that topic. upTo <= cursor is dropped: the connection already holds a
 // newer state than the instance reader, so nothing ever goes backwards.
-export function deliver(conn, topic, upTo, frame) {
+// A slow connection (see backpressure.js) receives no detail; its cursor does
+// not move, and a snapshot catches it up once it drains.
+export function deliver(conn, topic, upTo, frame, backpressure = null) {
   const cursor = conn.cursors.get(topic);
   if (cursor === PENDING) {
     // The connection is still receiving its snapshot/replay: keep it for later.
@@ -70,6 +75,7 @@ export function deliver(conn, topic, upTo, frame) {
     return false;
   }
   if (cursor && compareIds(upTo, cursor) <= 0) return false;
+  if (backpressure && !backpressure.admit(conn)) return false;
   conn.cursors.set(topic, upTo);
   conn.send(frame);
   return true;
@@ -88,6 +94,7 @@ export function createFanout({
   flushMs = 1000,
   batchSize = 100,
   heartbeatMs = 15000,
+  backpressure = null,
   metrics = noMetrics,
   logger = console
 }) {
@@ -123,7 +130,7 @@ export function createFanout({
       if (subscribers.size === 0) continue;
       const frame = serialize(deltaMessage(topic, id, changes, reasonOf(event)));
       for (const conn of subscribers) {
-        if (deliver(conn, topic, upTo, frame)) sent += 1;
+        if (deliver(conn, topic, upTo, frame, backpressure)) sent += 1;
         else dropped += 1;
       }
     }
@@ -152,7 +159,7 @@ export function createFanout({
       if (subscribers.size === 0) continue;
       const frame = serialize(deltaMessage(topic, upToText, changes, reason));
       for (const conn of subscribers) {
-        if (deliver(conn, topic, upTo, frame)) sent += 1;
+        if (deliver(conn, topic, upTo, frame, backpressure)) sent += 1;
         else dropped += 1;
         inBatch += 1;
         if (inBatch >= batchSize) {
@@ -189,12 +196,13 @@ export function createFanout({
     return inFlight;
   }
 
-  // Periodic SSE comment so load balancers do not close idle connections
-  // (an AWS ALB cuts at 60 s by default). Also batched.
+  // Periodic keep-alive so load balancers do not close idle connections (an
+  // AWS ALB cuts at 60 s by default): an SSE comment or a WebSocket ping.
+  // Batched, and skipped for degraded (slow) connections.
   async function heartbeat() {
     let inBatch = 0;
     for (const conn of registry.connections) {
-      conn.send(': heartbeat\n\n');
+      if (!conn.degraded) conn.heartbeat();
       inBatch += 1;
       if (inBatch >= batchSize) {
         inBatch = 0;

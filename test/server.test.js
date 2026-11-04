@@ -18,7 +18,7 @@ test('exports three independent Redis clients', () => {
   assert.notStrictEqual(redisSubClient, redisPubClient);
 });
 
-test('the HTTP server accepts a WebSocket connection on /ws', async (t) => {
+test('the HTTP server upgrades /ws and validates the public subscription', async (t) => {
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
@@ -27,19 +27,14 @@ test('the HTTP server accepts a WebSocket connection on /ws', async (t) => {
 
   const { port } = server.address();
   const client = new WebSocket(`ws://127.0.0.1:${port}/ws`);
-  t.after(() => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.close();
-    } else if (client.readyState !== WebSocket.CLOSED) {
-      client.terminate();
-    }
-  });
+  t.after(() => client.terminate());
 
   await new Promise((resolve, reject) => {
     client.once('open', resolve);
     client.once('error', reject);
   });
-
-  assert.equal(webSocketServer.clients.size, 1);
-  client.close();
+  // Without ?sub= the server closes with an explicit application code.
+  const code = await new Promise((resolve) => client.once('close', (closeCode) => resolve(closeCode)));
+  assert.equal(code, 4400);
+  assert.ok(webSocketServer);
 });

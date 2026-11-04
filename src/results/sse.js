@@ -1,7 +1,9 @@
 import { createConnection } from './topics.js';
 
-// Public transport: Server-Sent Events. The fan-out only sees send(string), so
-// changing the transport does not touch topics or fanout.
+const SLOW_CLOSE_GRACE_MS = 5_000;
+
+// Public transport: Server-Sent Events. The fan-out only sees the connection
+// interface (topics.js), so the transport never leaks into topics or fanout.
 export function openSseConnection(req, res, instanceId) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -14,9 +16,24 @@ export function openSseConnection(req, res, instanceId) {
   req.socket.setKeepAlive(true);
   res.write(': connected\n\n');
 
-  const conn = createConnection((frame) => {
-    if (!res.destroyed) res.write(frame);
-  }, { bufferedBytes: () => res.writableLength });
-  conn.close = () => res.end();
+  const write = (text) => {
+    if (!res.destroyed && !res.writableEnded) res.write(text);
+  };
+  const conn = createConnection((frame) => write(frame.sse), {
+    transport: 'sse',
+    bufferedBytes: () => res.writableLength,
+    heartbeat: () => write(': heartbeat\n\n'),
+    close: () => res.end(),
+    disconnectSlow: () => {
+      // The signal is queued behind the backlog; if the client never drains
+      // it, the socket is destroyed so its memory is released anyway.
+      write(`data: ${JSON.stringify({ t: 'reconnect', reason: 'slow_consumer' })}\n\n`);
+      res.end();
+      setTimeout(() => res.destroy(), SLOW_CLOSE_GRACE_MS).unref();
+    }
+  });
+  res.on('close', () => {
+    conn.closed = true;
+  });
   return conn;
 }

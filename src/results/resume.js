@@ -37,7 +37,7 @@ export function createResume({ redis, keys, registry, metrics, maxReplay = 500 }
     return { upTo, states: hashes.map(toState) };
   }
 
-  async function resume(conn, subscriptions) {
+  async function resume(conn, subscriptions, { kind = 'initial' } = {}) {
     // The connection joins the registry BEFORE reading Redis, with its cursor
     // set to PENDING: live deltas that arrive meanwhile are kept and filtered
     // by upTo at the end, so nothing is lost between the read and the join.
@@ -48,7 +48,7 @@ export function createResume({ redis, keys, registry, metrics, maxReplay = 500 }
 
     const withCursor = subscriptions.filter((s) => s.cursor);
     const toSnapshot = subscriptions.filter((s) => !s.cursor).map((s) => s.topic);
-    for (let i = 0; i < toSnapshot.length; i += 1) metrics.reconnection('initial');
+    for (let i = 0; i < toSnapshot.length; i += 1) metrics.reconnection(kind);
 
     if (withCursor.length > 0) {
       const oldest = withCursor.reduce((min, s) => (compareIds(s.cursor, min) < 0 ? s.cursor : min), withCursor[0].cursor);

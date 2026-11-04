@@ -48,5 +48,11 @@ export const config = {
   eventLoopResolutionMs: positiveInteger(process.env.EL_RESOLUTION_MS, 10, 'EL_RESOLUTION_MS'),
   metricsTtlSeconds: positiveInteger(process.env.METRICS_TTL_S, 5, 'METRICS_TTL_S'),
   // RF-6: more than MAX_REPLAY pending events are resolved with a snapshot.
-  maxReplay: positiveInteger(process.env.MAX_REPLAY, 500, 'MAX_REPLAY')
+  maxReplay: positiveInteger(process.env.MAX_REPLAY, 500, 'MAX_REPLAY'),
+  // RF-9: per-connection output buffer thresholds.
+  slowSoftBytes: positiveInteger(process.env.SLOW_SOFT_BYTES, 256 * 1024, 'SLOW_SOFT_BYTES'),
+  slowHardBytes: positiveInteger(process.env.SLOW_HARD_BYTES, 1024 * 1024, 'SLOW_HARD_BYTES'),
+  slowMaxDegradedMs: positiveInteger(process.env.SLOW_MAX_DEGRADED_MS, 30_000, 'SLOW_MAX_DEGRADED_MS'),
+  // Polling transport: per-instance cache of a topic snapshot.
+  pollCacheMs: positiveInteger(process.env.POLL_CACHE_MS, 1000, 'POLL_CACHE_MS')
 };

@@ -13,5 +13,20 @@ export function createResultsRoutes(results) {
     }
   });
   router.get('/stream', (req, res) => results.handleStream(req, res));
+  // Polling transport (also handy for clients that cannot keep a connection).
+  router.get('/api/results/:topic', async (req, res, next) => {
+    if (!results.isTopic(req.params.topic)) {
+      return res.status(400).json({ status: 'rejected', message: 'Use dep, mun:{id} or pto:{id}.' });
+    }
+    try {
+      res.set('Cache-Control', 'public, max-age=1');
+      return res.json(await results.poll(req.params.topic));
+    } catch (error) {
+      if (results.status.redis === 'down' || /closed|ECONNREFUSED|offline/i.test(String(error?.message))) {
+        return res.status(503).json({ status: 'temporarily_unavailable', retryable: true });
+      }
+      return next(error);
+    }
+  });
   return router;
 }

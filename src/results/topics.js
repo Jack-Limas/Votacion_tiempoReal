@@ -4,7 +4,7 @@
 //   delivery O(k) with k = subscribers of the topic. Delivering an event never
 //   walks all the connections of the instance.
 
-const TOPIC_RE = /^(dep|mun:\d{1,6}|pto:\d{1,6})$/;
+export const TOPIC_PATTERN = /^(dep|mun:\d{1,6}|pto:\d{1,6})$/;
 const CURSOR_RE = /^\d{1,20}-\d{1,20}$/;
 const EMPTY = new Set();
 
@@ -13,14 +13,27 @@ export const PENDING = Symbol('pending');
 
 let sequence = 0;
 
-// A connection knows nothing about the transport: it only exposes send(string)
-// and, optionally, bufferedBytes() for back-pressure.
-export function createConnection(send, { bufferedBytes = () => 0 } = {}) {
+// A connection knows nothing about the transport. It exposes send(frame),
+// heartbeat(), bufferedBytes() for back-pressure, close() and
+// disconnectSlow() (close with a "come back with your cursors" signal).
+export function createConnection(send, {
+  transport = 'test',
+  bufferedBytes = () => 0,
+  heartbeat = () => {},
+  close = () => {},
+  disconnectSlow = close
+} = {}) {
   sequence += 1;
   return {
     id: sequence,
+    transport,
     send,
+    heartbeat,
     bufferedBytes,
+    close,
+    disconnectSlow,
+    closed: false,
+    degraded: false,
     topics: new Set(),
     cursors: new Map(),
     pending: null
@@ -89,7 +102,7 @@ export function parseSubscriptions(raw, { maxTopics = 10 } = {}) {
   const result = new Map();
   for (const part of raw.split(',')) {
     const [topic, cursor, ...extra] = part.trim().split('@');
-    if (!TOPIC_RE.test(topic) || extra.length > 0) {
+    if (!TOPIC_PATTERN.test(topic) || extra.length > 0) {
       throw new Error(`Invalid topic: ${part}. Use dep, mun:{id} or pto:{id}.`);
     }
     if (cursor !== undefined && !CURSOR_RE.test(cursor)) {

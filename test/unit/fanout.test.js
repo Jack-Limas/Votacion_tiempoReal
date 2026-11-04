@@ -13,7 +13,7 @@ function recordingConnection(registry, topic) {
   const conn = createConnection((frame) => received.push(frame));
   registry.add(conn);
   registry.subscribe(conn, topic);
-  return { conn, received, messages: () => received.map((f) => JSON.parse(f.slice(6))) };
+  return { conn, received, messages: () => received.map((f) => JSON.parse(f.json)) };
 }
 
 test('compareIds compares ms and sequence as numbers, not as text', () => {

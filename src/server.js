@@ -36,6 +36,8 @@ export const app = createApp(idempotencyService, {
 });
 export const server = createServer(app);
 export const webSocketServer = createWebSocketServer(server, { routes: [verification.upgradeRoute] });
+// /ws carries the public results over WebSocket (transport comparison, RT-5).
+webSocketServer.on('connection', (ws, req) => results.handleWebSocket(ws, req));
 
 export async function startServer() {
   await connectRedisClients();
