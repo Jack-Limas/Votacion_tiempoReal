@@ -98,3 +98,11 @@ definitiva (aceptación, duplicado, rechazo o envío a verificación) se comunic
 por `onResult` y retira el elemento de la cola; errores de red, `429` y `5xx`
 lo conservan para reintentar. IndexedDB depende del almacenamiento del
 navegador y puede estar sujeto a políticas de limpieza del dispositivo.
+
+## Verification desk (auditors and coordinator)
+
+Doubtful actas are consumed from the verification stream into a priority
+queue with exclusive, fenced leases; consoles live at `/verification/` and use
+the WebSocket endpoint `/ws/verification`. Run `docker compose up -d` for a
+local Redis. Design, Redis keys, TTLs, costs and failure behaviour are in
+[docs/verification.md](docs/verification.md).
