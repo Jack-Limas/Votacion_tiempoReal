@@ -45,8 +45,17 @@ function permutations(items) {
   return items.flatMap((item, i) => permutations([...items.slice(0, i), ...items.slice(i + 1)]).map((rest) => [item, ...rest]));
 }
 
+// Test connections get a generous timeout and fail loudly: a slow connect on
+// a loaded machine must not masquerade as a convergence failure.
+async function connectForTest() {
+  const client = createClient({ url: REDIS_URL, socket: { connectTimeout: 5000 } });
+  client.on('error', () => {});
+  await client.connect();
+  return client;
+}
+
 async function withPrefix(t) {
-  const client = await connectOrNull();
+  const client = await connectForTest();
   const prefix = `test:{rf2-${randomUUID().slice(0, 8)}}`;
   const keys = createKeys(prefix);
   await seedCatalog(client, keys.catalog);
