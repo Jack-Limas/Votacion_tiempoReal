@@ -24,7 +24,8 @@ export function connect(baseUrl, subs, { onMessage = () => {}, onClose = () => {
         while (end !== -1) {
           const block = buffer.slice(0, end);
           buffer = buffer.slice(end + 2);
-          if (block.startsWith('data: ')) {
+          // Heartbeats only keep the connection alive; callers never see them.
+          if (block.startsWith('data: ') && block !== 'data: {"t":"hb"}') {
             onMessage(parse ? JSON.parse(block.slice(6)) : block);
           }
           end = buffer.indexOf('\n\n');

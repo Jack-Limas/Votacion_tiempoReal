@@ -14,6 +14,15 @@ let source = null;
 let attempt = 0;
 let retryTimer = null;
 let stableTimer = null;
+let watchdog = null;
+// The server sends a heartbeat every 10 s; 25 s of silence means the instance
+// died without closing the socket.
+const WATCHDOG_MS = 25_000;
+
+function feedWatchdog() {
+  clearTimeout(watchdog);
+  watchdog = setTimeout(() => reconnect(false), WATCHDOG_MS);
+}
 const states = new Map(); // topic -> { cursor, state }
 let renderQueued = false;
 
@@ -103,6 +112,7 @@ function explain(reason) {
 }
 
 function apply(message) {
+  if (message.t === 'hb') return;
   if (message.t === 'status') {
     if (message.redis === 'down') {
       banner('warn', `Live updates are paused since ${new Date(message.since).toLocaleTimeString()}. You are seeing the last confirmed numbers; nothing is lost and the page will catch up automatically.`);
@@ -138,6 +148,7 @@ function connect() {
   setConnection('warn', attempt === 0 ? 'Connecting…' : 'Reconnecting…');
   source = new EventSource(`/stream?sub=${encodeURIComponent(sub)}`);
   source.onopen = () => {
+    feedWatchdog();
     setConnection('ok', 'Live');
     banner(null);
     clearTimeout(stableTimer);
@@ -145,6 +156,7 @@ function connect() {
     stableTimer = setTimeout(() => { attempt = 0; }, 10_000);
   };
   source.onmessage = (event) => {
+    feedWatchdog();
     try {
       apply(JSON.parse(event.data));
     } catch (error) {
@@ -155,6 +167,7 @@ function connect() {
 }
 
 function reconnect(immediate) {
+  clearTimeout(watchdog);
   source?.close();
   source = null;
   clearTimeout(stableTimer);

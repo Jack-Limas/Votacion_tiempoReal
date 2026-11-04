@@ -44,7 +44,9 @@ export const config = {
   fanoutMode: oneOf(process.env.FANOUT_MODE, ['batched', 'naive'], 'batched', 'FANOUT_MODE'),
   flushMs: positiveInteger(process.env.FLUSH_MS, 1000, 'FLUSH_MS'),
   batchSize: positiveInteger(process.env.BATCH_SIZE, 100, 'BATCH_SIZE'),
-  heartbeatMs: positiveInteger(process.env.HEARTBEAT_MS, 15000, 'HEARTBEAT_MS'),
+  // Public heartbeat; clients treat 2.5x this interval of silence as a dead
+  // instance (a killed container never sends a FIN or RST).
+  heartbeatMs: positiveInteger(process.env.HEARTBEAT_MS, 10000, 'HEARTBEAT_MS'),
   eventLoopResolutionMs: positiveInteger(process.env.EL_RESOLUTION_MS, 10, 'EL_RESOLUTION_MS'),
   metricsTtlSeconds: positiveInteger(process.env.METRICS_TTL_S, 5, 'METRICS_TTL_S'),
   // RF-6: more than MAX_REPLAY pending events are resolved with a snapshot.

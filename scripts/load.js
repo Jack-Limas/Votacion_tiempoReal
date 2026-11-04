@@ -79,7 +79,7 @@ async function worker(opts) {
           stats.bytes += chunk.length;
           const text = rest + chunk;
           for (let i = text.indexOf('data: '); i !== -1; i = text.indexOf('data: ', i + 6)) {
-            stats.messages += 1;
+            if (!text.startsWith('data: {"t":"hb"}', i)) stats.messages += 1;
           }
           rest = text.slice(-5);
         });

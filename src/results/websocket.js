@@ -12,8 +12,9 @@ export function openWebSocketConnection(ws, instanceId) {
   }, {
     transport: 'ws',
     bufferedBytes: () => ws.bufferedAmount,
+    // Application-level heartbeat (browsers cannot see WebSocket pings).
     heartbeat: () => {
-      if (ws.readyState === ws.OPEN) ws.ping();
+      if (ws.readyState === ws.OPEN) ws.send('{"t":"hb"}');
     },
     close: () => ws.close(1001, 'server shutting down'),
     disconnectSlow: () => {

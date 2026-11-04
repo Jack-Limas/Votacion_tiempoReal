@@ -1,6 +1,7 @@
 import { createConnection } from './topics.js';
 
 const SLOW_CLOSE_GRACE_MS = 5_000;
+const HEARTBEAT_FRAME = 'data: {"t":"hb"}\n\n';
 
 // Public transport: Server-Sent Events. The fan-out only sees the connection
 // interface (topics.js), so the transport never leaks into topics or fanout.
@@ -22,7 +23,10 @@ export function openSseConnection(req, res, instanceId) {
   const conn = createConnection((frame) => write(frame.sse), {
     transport: 'sse',
     bufferedBytes: () => res.writableLength,
-    heartbeat: () => write(': heartbeat\n\n'),
+    // A data frame, not an SSE comment: EventSource hides comments from the
+    // page, and the client watchdog needs to see traffic to detect a dead
+    // instance whose socket never closes.
+    heartbeat: () => write(HEARTBEAT_FRAME),
     close: () => res.end(),
     disconnectSlow: () => {
       // The signal is queued behind the backlog; if the client never drains
