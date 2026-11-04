@@ -39,6 +39,9 @@ export function createIdempotencyService(redis, {
   return {
     async registerActa(acta, validation) {
       const digest = createHash('sha256').update(stableStringify(acta)).digest('hex');
+      const contentDigest = createHash('sha256')
+        .update(stableStringify({ votos: acta.votos, sufragantes: acta.sufragantes }))
+        .digest('hex');
       const accepted = validation.valid;
       const result = accepted
         ? {
@@ -65,7 +68,6 @@ export function createIdempotencyService(redis, {
         const rawResult = await redis.eval(REGISTER_ACTA_SCRIPT, {
           keys: [
             `${keyPrefix}:idem:${acta.idem}`,
-            `${keyPrefix}:aggregate`,
             `${keyPrefix}:verification`,
             keys.mesa(acta.mesa),
             keys.total(`pto:${acta.puesto}`),
@@ -83,7 +85,8 @@ export function createIdempotencyService(redis, {
             JSON.stringify(acta),
             acta.idem,
             String(Date.now()),
-            String(streamMaxLen)
+            String(streamMaxLen),
+            contentDigest
           ]
         });
         return JSON.parse(rawResult);

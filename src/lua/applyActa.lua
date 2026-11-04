@@ -1,8 +1,20 @@
--- KEYS[1] idem  KEYS[2] aggregate  KEYS[3] verification
--- KEYS[4] acc:mesa:{id}  KEYS[5] acc:pto:{id}  KEYS[6] acc:mun:{id}  KEYS[7] acc:dep
--- KEYS[8] events stream  KEYS[9] catalog (total mesas per topic)
--- ARGV[1] digest  ARGV[2] result  ARGV[3] ttl  ARGV[4] votos  ARGV[5] accepted
+-- Registers an acta: idempotency, hierarchical totals and the public event,
+-- as one atomic operation.
+--
+-- KEYS[1] idem  KEYS[2] verification stream
+-- KEYS[3] acc:mesa:{id}  KEYS[4] acc:pto:{id}  KEYS[5] acc:mun:{id}  KEYS[6] acc:dep
+-- KEYS[7] events stream  KEYS[8] catalog (total mesas per topic)
+-- ARGV[1] request digest  ARGV[2] result  ARGV[3] ttl  ARGV[4] votos  ARGV[5] accepted
 -- ARGV[6] acta  ARGV[7] idem  ARGV[8] receivedAt (ms)  ARGV[9] stream MAXLEN
+-- ARGV[10] content digest (votos + sufragantes)
+--
+-- Convergence (RF-2): per mesa, the applied version is the maximum of
+-- (version, digest) over every acta received. A higher version always wins;
+-- for two actas with the same version and different figures the larger
+-- content digest wins. That order is total and independent of arrival order, so the final
+-- totals depend only on the set of actas received. Resending an acta whose
+-- idem key already expired is still safe: its (version, digest) is not greater
+-- than the applied one, so it is reported as superseded and adds nothing.
 local existing = redis.call('GET', KEYS[1])
 if existing then
   local saved = cjson.decode(existing)
@@ -21,53 +33,32 @@ end
 
 local result = cjson.decode(ARGV[2])
 if ARGV[5] == '0' then
-  local verificationType = redis.call('TYPE', KEYS[3]).ok
+  local verificationType = redis.call('TYPE', KEYS[2]).ok
   if verificationType ~= 'none' and verificationType ~= 'stream' then
     return redis.error_reply('The verification Redis key is not a stream.')
   end
-  redis.call('XADD', KEYS[3], '*', 'idem', ARGV[7], 'acta', ARGV[6])
+  redis.call('XADD', KEYS[2], '*', 'idem', ARGV[7], 'acta', ARGV[6])
 end
 
 if ARGV[5] == '1' then
-  local aggregateType = redis.call('TYPE', KEYS[2]).ok
-  if aggregateType ~= 'none' and aggregateType ~= 'hash' then
-    return redis.error_reply('The aggregate Redis key is not a hash.')
-  end
-
   local votes = cjson.decode(ARGV[4])
-  local maxSafeInteger = 9007199254740991
-  for candidate, increment in pairs(votes) do
-    local field = 'vote:' .. candidate
-    local current = tonumber(redis.call('HGET', KEYS[2], field) or '0')
-    local amount = tonumber(increment)
-    if not current or not amount or current < 0 or current + amount > maxSafeInteger then
-      return redis.error_reply('Vote total out of the safe range.')
-    end
-  end
-  local currentActas = tonumber(redis.call('HGET', KEYS[2], 'actas') or '0')
-  if not currentActas or currentActas < 0 or currentActas + 1 > maxSafeInteger then
-    return redis.error_reply('Acta total out of the safe range.')
-  end
 
-  for candidate, increment in pairs(votes) do
-    redis.call('HINCRBY', KEYS[2], 'vote:' .. candidate, increment)
-  end
-  redis.call('HINCRBY', KEYS[2], 'actas', 1)
-
-  -- Hierarchical totals and stream event. The highest version wins: a version
-  -- equal to or lower than the applied one does not touch the totals. A newer
-  -- version reverts the previous one (per-candidate difference) in puesto,
+  -- Hierarchical totals and stream event. Only an acta that is greater than the
+  -- applied one in (version, content digest) order touches the totals; it
+  -- reverts the previous figures (per-candidate difference) in puesto,
   -- municipio and department.
   local acta = cjson.decode(ARGV[6])
   local version = tonumber(acta.version)
-  local previous = tonumber(redis.call('HGET', KEYS[4], 'version') or '0')
-  if version <= previous then
+  local previous = tonumber(redis.call('HGET', KEYS[3], 'version') or '0')
+  local previousDigest = redis.call('HGET', KEYS[3], 'digest') or ''
+  if version < previous or (version == previous and ARGV[10] <= previousDigest) then
     result.superseded = true
+    result.appliedVersion = previous
     result.message = 'Version ' .. version .. ' does not supersede the applied one (' .. previous .. '); totals unchanged.'
   else
     local before = {}
     if previous > 0 then
-      local flat = redis.call('HGETALL', KEYS[4])
+      local flat = redis.call('HGETALL', KEYS[3])
       for i = 1, #flat, 2 do
         if string.sub(flat[i], 1, 2) == 'v:' then
           before[string.sub(flat[i], 3)] = tonumber(flat[i + 1])
@@ -100,19 +91,19 @@ if ARGV[5] == '1' then
     for candidate, _ in pairs(differences) do
       mesa['v:' .. candidate] = tonumber(votes[candidate] or 0)
     end
-    redis.call('DEL', KEYS[4])
+    redis.call('DEL', KEYS[3])
     for candidate, amount in pairs(votes) do
-      redis.call('HSET', KEYS[4], 'v:' .. candidate, amount)
+      redis.call('HSET', KEYS[3], 'v:' .. candidate, amount)
     end
-    redis.call('HSET', KEYS[4], 'version', version, 'acta', acta.acta)
+    redis.call('HSET', KEYS[3], 'version', version, 'digest', ARGV[10], 'acta', acta.acta)
     changes['mesa:' .. acta.mesa] = mesa
 
     -- Puesto, municipio and department: HINCRBY returns the new absolute
     -- value, which is what travels in the event.
     local levels = {
-      { key = KEYS[5], topic = 'pto:' .. acta.puesto },
-      { key = KEYS[6], topic = 'mun:' .. acta.municipio },
-      { key = KEYS[7], topic = 'dep' }
+      { key = KEYS[4], topic = 'pto:' .. acta.puesto },
+      { key = KEYS[5], topic = 'mun:' .. acta.municipio },
+      { key = KEYS[6], topic = 'dep' }
     }
     for _, level in ipairs(levels) do
       local delta = {}
@@ -125,7 +116,7 @@ if ARGV[5] == '1' then
       if kind == 'new' then
         local reported = redis.call('HINCRBY', level.key, 'mesas_reported', 1)
         delta.mesas_reported = reported
-        local total = tonumber(redis.call('HGET', KEYS[9], level.topic) or '0')
+        local total = tonumber(redis.call('HGET', KEYS[8], level.topic) or '0')
         if total and total > 0 then
           -- Stored as text with two decimals so the hash and the event carry
           -- exactly the same number.
@@ -150,7 +141,7 @@ if ARGV[5] == '1' then
       decreased = decreased,
       changes = changes
     }
-    result.event = redis.call('XADD', KEYS[8], 'MAXLEN', '~', ARGV[9], '*', 'e', cjson.encode(event))
+    result.event = redis.call('XADD', KEYS[7], 'MAXLEN', '~', ARGV[9], '*', 'e', cjson.encode(event))
     result.type = kind
   end
 end
