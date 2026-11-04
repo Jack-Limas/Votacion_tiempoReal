@@ -23,12 +23,19 @@ export const app = createApp(createIdempotencyService(redisClient), {
   routers: [verification.router, createPublicoRoutes(publico)],
   actaMiddleware: [verification.actaRateLimiter]
 });
-export const server = createServer(app);
-export const webSocketServer = createWebSocketServer(server, {
-  routes: [verification.upgradeRoute]
-});
+export default app;
+
+const isVercelRuntime = Boolean(process.env.VERCEL);
+export const server = isVercelRuntime ? null : createServer(app);
+export const webSocketServer = server
+  ? createWebSocketServer(server, { routes: [verification.upgradeRoute] })
+  : null;
 
 export async function startServer() {
+  if (!server) {
+    throw new Error('El servidor HTTP local no está disponible en Vercel.');
+  }
+
   await connectRedisClients();
   await verification.start();
   await publico.start();
@@ -40,31 +47,32 @@ export async function startServer() {
 }
 
 export async function stopServer() {
-  await verification.stop().catch((error) => {
-    console.error('Error stopping the verification module:', error);
-  });
-  for (const socket of webSocketServer.clients) {
+  const stopServices = await Promise.allSettled([
+    verification.stop(),
+    publico.stop()
+  ]);
+
+  for (const socket of webSocketServer?.clients ?? []) {
     socket.terminate();
   }
-  // Las conexiones SSE quedan abiertas indefinidamente: hay que cerrarlas para
-  // que server.close() termine.
-  await publico.stop();
 
-  const closeHttpServer = server.listening
+  const closeHttpServer = server?.listening
     ? new Promise((resolve, reject) => {
         server.close((error) => error ? reject(error) : resolve());
       })
     : Promise.resolve();
-  const closeWebSocketServer = new Promise((resolve, reject) => {
-    webSocketServer.close((error) => error ? reject(error) : resolve());
-  });
+  const closeWebSocketServer = webSocketServer
+    ? new Promise((resolve, reject) => {
+        webSocketServer.close((error) => error ? reject(error) : resolve());
+      })
+    : Promise.resolve();
 
-  const results = await Promise.allSettled([
+  const closeResults = await Promise.allSettled([
     closeHttpServer,
     closeWebSocketServer,
     closeRedisClients()
   ]);
-  const errors = results
+  const errors = [...stopServices, ...closeResults]
     .filter((result) => result.status === 'rejected')
     .map((result) => result.reason);
 
