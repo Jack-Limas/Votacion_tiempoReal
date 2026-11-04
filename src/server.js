@@ -5,17 +5,31 @@ import { config } from './config.js';
 import {
   closeRedisClients,
   connectRedisClients,
-  redisClient
+  redisClient,
+  redisSubClient
 } from './config/redis.js';
 import { createIdempotencyService } from './services/idempotencyService.js';
+import { createPublico } from './publico/index.js';
+import { createPublicoRoutes } from './routes/publicoRoutes.js';
 import { createWebSocketServer } from './sockets/index.js';
+import { createVerificationModule } from './verification/index.js';
 
-export const app = createApp(createIdempotencyService(redisClient));
+export const verification = createVerificationModule({
+  redis: redisClient,
+  subscriber: redisSubClient
+});
+export const publico = createPublico({ redis: redisClient });
+export const app = createApp(createIdempotencyService(redisClient), {
+  routers: [verification.router, createPublicoRoutes(publico)],
+  actaMiddleware: [verification.actaRateLimiter]
+});
 export default app;
 
 const isVercelRuntime = Boolean(process.env.VERCEL);
 export const server = isVercelRuntime ? null : createServer(app);
-export const webSocketServer = server ? createWebSocketServer(server) : null;
+export const webSocketServer = server
+  ? createWebSocketServer(server, { routes: [verification.upgradeRoute] })
+  : null;
 
 export async function startServer() {
   if (!server) {
@@ -23,14 +37,21 @@ export async function startServer() {
   }
 
   await connectRedisClients();
+  await verification.start();
+  await publico.start();
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(config.port, config.host, resolve);
   });
-  console.log(`API y WebSocket listos en ${config.host}:${config.port}.`);
+  console.log(`API, WebSocket y SSE listos en ${config.host}:${config.port} (instancia ${config.instanceId}).`);
 }
 
 export async function stopServer() {
+  const stopServices = await Promise.allSettled([
+    verification.stop(),
+    publico.stop()
+  ]);
+
   for (const socket of webSocketServer?.clients ?? []) {
     socket.terminate();
   }
@@ -46,12 +67,12 @@ export async function stopServer() {
       })
     : Promise.resolve();
 
-  const results = await Promise.allSettled([
+  const closeResults = await Promise.allSettled([
     closeHttpServer,
     closeWebSocketServer,
     closeRedisClients()
   ]);
-  const errors = results
+  const errors = [...stopServices, ...closeResults]
     .filter((result) => result.status === 'rejected')
     .map((result) => result.reason);
 

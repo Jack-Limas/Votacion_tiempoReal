@@ -1,70 +1,14 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { config } from '../config.js';
+import { crearClaves } from '../publico/claves.js';
 
-const REGISTER_ACTA_SCRIPT = `
-local existing = redis.call('GET', KEYS[1])
-if existing then
-  local saved = cjson.decode(existing)
-  if saved.digest ~= ARGV[1] then
-    return cjson.encode({
-      status = 'idempotency_conflict',
-      accepted = false,
-      duplicate = false,
-      message = 'La clave idem ya fue utilizada con un contenido diferente.'
-    })
-  end
-  local result = saved.result
-  result.duplicate = true
-  return cjson.encode(result)
-end
-
-local result = cjson.decode(ARGV[2])
-if ARGV[5] == '0' then
-  local verificationType = redis.call('TYPE', KEYS[3]).ok
-  if verificationType ~= 'none' and verificationType ~= 'stream' then
-    return redis.error_reply('La clave de verificación Redis no es un stream.')
-  end
-  redis.call('XADD', KEYS[3], '*', 'idem', ARGV[7], 'acta', ARGV[6])
-end
-
-if ARGV[5] == '1' then
-  local aggregateType = redis.call('TYPE', KEYS[2]).ok
-  if aggregateType ~= 'none' and aggregateType ~= 'hash' then
-    return redis.error_reply('La clave de acumulados Redis no es un hash.')
-  end
-
-  local votes = cjson.decode(ARGV[4])
-  local maxSafeInteger = 9007199254740991
-  for candidate, increment in pairs(votes) do
-    local field = 'vote:' .. candidate
-    local current = tonumber(redis.call('HGET', KEYS[2], field) or '0')
-    local amount = tonumber(increment)
-    if not current or not amount or current < 0 or current + amount > maxSafeInteger then
-      return redis.error_reply('Acumulado de votos fuera del rango seguro.')
-    end
-  end
-  local currentActas = tonumber(redis.call('HGET', KEYS[2], 'actas') or '0')
-  if not currentActas or currentActas < 0 or currentActas + 1 > maxSafeInteger then
-    return redis.error_reply('Acumulado de actas fuera del rango seguro.')
-  end
-
-  for candidate, increment in pairs(votes) do
-    redis.call('HINCRBY', KEYS[2], 'vote:' .. candidate, increment)
-  end
-  redis.call('HINCRBY', KEYS[2], 'actas', 1)
-end
-
--- Redis ejecuta el script sin intercalar otras operaciones. Si Redis lo completa
--- pero el proceso o la red cae antes de responder, el reenvío con el mismo idem
--- obtiene este resultado guardado y no vuelve a sumar los votos. Configure AOF
--- y/o replicación de Redis para reducir el riesgo ante una caída del propio Redis.
-redis.call('SET', KEYS[1], cjson.encode({
-  digest = ARGV[1],
-  result = result,
-  acta = cjson.decode(ARGV[6])
-}), 'EX', ARGV[3])
-return cjson.encode(result)
-`;
+// El script vive en src/lua/aplicarActa.lua: idempotencia, acumulados y XADD
+// del evento público en una sola operación atómica.
+const REGISTER_ACTA_SCRIPT = readFileSync(
+  new URL('../lua/aplicarActa.lua', import.meta.url),
+  'utf8'
+);
 
 function stableStringify(value) {
   if (Array.isArray(value)) {
@@ -88,8 +32,10 @@ export class RedisUnavailableError extends Error {
 
 export function createIdempotencyService(redis, {
   keyPrefix = config.redisKeyPrefix,
-  ttlSeconds = config.idempotencyTtlSeconds
+  ttlSeconds = config.idempotencyTtlSeconds,
+  streamMaxLen = config.streamMaxLen
 } = {}) {
+  const claves = crearClaves(keyPrefix);
   return {
     async registerActa(acta, validation) {
       const digest = createHash('sha256').update(stableStringify(acta)).digest('hex');
@@ -124,7 +70,13 @@ export function createIdempotencyService(redis, {
           keys: [
             `${keyPrefix}:idem:${acta.idem}`,
             `${keyPrefix}:aggregate`,
-            `${keyPrefix}:verification`
+            `${keyPrefix}:verification`,
+            claves.mesa(acta.mesa),
+            claves.acumulado(`pto:${acta.puesto}`),
+            claves.acumulado(`mun:${acta.municipio}`),
+            claves.acumulado('dep'),
+            claves.stream,
+            claves.catalogo
           ],
           arguments: [
             digest,
@@ -133,7 +85,9 @@ export function createIdempotencyService(redis, {
             JSON.stringify(acta.votos),
             accepted ? '1' : '0',
             JSON.stringify(acta),
-            acta.idem
+            acta.idem,
+            String(Date.now()),
+            String(streamMaxLen)
           ]
         });
         return JSON.parse(rawResult);

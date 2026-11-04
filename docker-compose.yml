@@ -1,0 +1,70 @@
+# Entorno local: 8 réplicas idénticas detrás de nginx (round robin, sin
+# sesiones pegajosas) y un solo nodo Valkey. Las instancias no se conocen entre
+# sí: toda la coordinación pasa por Valkey.
+name: votacion
+
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    # AOF como en la configuración de Jack: las confirmaciones sobreviven a un reinicio.
+    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      - "${VALKEY_PORT:-6379}:6379"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  app:
+    build: .
+    image: votacion-tiempo-real:local
+    deploy:
+      replicas: 8
+    environment:
+      # Secreto compartido por las 8 instancias para los tokens de verificación (módulo de Jack).
+      VERIFICATION_TOKEN_SECRET: ${VERIFICATION_TOKEN_SECRET:-solo-local-cambiar-en-produccion-0123456789}
+      PORT: 3000
+      REDIS_URL: redis://valkey:6379
+      MAXLEN: ${MAXLEN:-10000}
+      FANOUT_MODE: ${FANOUT_MODE:-batched}
+      FLUSH_MS: ${FLUSH_MS:-1000}
+      BATCH_SIZE: ${BATCH_SIZE:-100}
+      MAX_REPLAY: ${MAX_REPLAY:-500}
+    ulimits:
+      nofile: { soft: 200000, hard: 200000 }
+    depends_on:
+      valkey:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    ulimits:
+      nofile: { soft: 200000, hard: 200000 }
+    depends_on:
+      - app
+
+  # Generador de carga dentro de la red de compose (no pasa por el reenvío de
+  # puertos del host). Uso: docker compose run --rm carga --conexiones=10000
+  carga:
+    image: votacion-tiempo-real:local
+    profiles: ["carga"]
+    entrypoint: ["node", "scripts/carga.js"]
+    environment:
+      BASE_URL: http://nginx
+      REDIS_URL: redis://valkey:6379
+    volumes:
+      - ./resultados:/app/resultados
+    ulimits:
+      nofile: { soft: 200000, hard: 200000 }
+    depends_on:
+      - nginx
+
+volumes:
+  valkey-data:

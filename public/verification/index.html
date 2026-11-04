@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Verification Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <form class="card login" id="login" autocomplete="on">
+      <div class="brand"><div class="brand-mark">✓</div><div>Preconteo<small>Verification desk</small></div></div>
+      <h1>Sign in</h1>
+      <p>Auditors review doubtful actas; coordinators watch the team live.</p>
+
+      <div class="segmented" role="tablist" aria-label="Role">
+        <button type="button" class="active" data-role="auditor" role="tab" aria-selected="true">Auditor</button>
+        <button type="button" data-role="coordinator" role="tab" aria-selected="false">Coordinator</button>
+      </div>
+
+      <label class="field"><span>ID</span>
+        <input name="id" required pattern="[A-Za-z0-9_\-]{2,40}" placeholder="AUD-001" autocomplete="username">
+      </label>
+      <label class="field"><span>Display name</span>
+        <input name="name" maxlength="60" placeholder="Ana Pérez">
+      </label>
+      <label class="field"><span>Access code</span>
+        <input name="accessCode" type="password" required autocomplete="current-password">
+      </label>
+      <div class="error-text" id="error" role="alert"></div>
+      <button class="btn primary block" type="submit" id="submit">Enter console</button>
+    </form>
+  </div>
+  <script type="module" src="login.js"></script>
+</body>
+</html>

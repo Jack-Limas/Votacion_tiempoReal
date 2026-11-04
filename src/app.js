@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import { config } from './config.js';
 import { createActaRoutes } from './routes/actaRoutes.js';
 
-export function createApp(idempotencyService) {
+export function createApp(idempotencyService, { routers = [], actaMiddleware = [] } = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use(helmet());
@@ -14,7 +14,8 @@ export function createApp(idempotencyService) {
   }));
   app.use(express.json({ limit: '64kb', strict: true }));
   app.get('/health', (_req, res) => res.status(200).json({ status: 'ok' }));
-  app.use('/api/actas', createActaRoutes(idempotencyService));
+  app.use('/api/actas', ...actaMiddleware, createActaRoutes(idempotencyService));
+  for (const router of routers) app.use(router);
 
   app.use((error, _req, res, _next) => {
     if (error instanceof SyntaxError && 'body' in error) {
