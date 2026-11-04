@@ -5,17 +5,35 @@ import { config } from './config.js';
 import {
   closeRedisClients,
   connectRedisClients,
-  redisClient
+  redisClient,
+  redisSubClient
 } from './config/redis.js';
 import { createIdempotencyService } from './services/idempotencyService.js';
+import { createPublico } from './publico/index.js';
+import { createPublicoRoutes } from './routes/publicoRoutes.js';
 import { createWebSocketServer } from './sockets/index.js';
+import { createVerificationModule } from './verification/index.js';
 
-export const app = createApp(createIdempotencyService(redisClient));
+// 1. Inicializar módulos de tus compañeros
+export const verification = createVerificationModule({
+  redis: redisClient,
+  subscriber: redisSubClient
+});
+export const publico = createPublico({ redis: redisClient });
+
+// 2. Crear la App integrando las rutas
+export const app = createApp(createIdempotencyService(redisClient), {
+  routers: [verification.router, createPublicoRoutes(publico)],
+  actaMiddleware: [verification.actaRateLimiter]
+});
 export default app;
 
+// 3. Lógica combinada: Comprobar Vercel y levantar servidores solo si no es Vercel
 const isVercelRuntime = Boolean(process.env.VERCEL);
 export const server = isVercelRuntime ? null : createServer(app);
-export const webSocketServer = server ? createWebSocketServer(server) : null;
+export const webSocketServer = server ? createWebSocketServer(server, {
+  routes: [verification.upgradeRoute]
+}) : null;
 
 export async function startServer() {
   if (!server) {
@@ -23,17 +41,28 @@ export async function startServer() {
   }
 
   await connectRedisClients();
+  await verification.start();
+  await publico.start();
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(config.port, config.host, resolve);
   });
-  console.log(`API y WebSocket listos en ${config.host}:${config.port}.`);
+  console.log(`API, WebSocket y SSE listos en ${config.host}:${config.port} (instancia ${config.instanceId}).`);
 }
 
 export async function stopServer() {
+  await verification.stop().catch((error) => {
+    console.error('Error stopping the verification module:', error);
+  });
+  
+  // Aseguramos que itera de forma segura verificando si existen clientes
   for (const socket of webSocketServer?.clients ?? []) {
     socket.terminate();
   }
+  
+  // Las conexiones SSE quedan abiertas indefinidamente: hay que cerrarlas para
+  // que server.close() termine.
+  await publico.stop();
 
   const closeHttpServer = server?.listening
     ? new Promise((resolve, reject) => {
