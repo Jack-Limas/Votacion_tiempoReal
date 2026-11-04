@@ -10,6 +10,9 @@ stateless Node.js instances behind a load balancer share nothing but Redis
 app at `/jury/`, verification consoles at `/verification/`, operations
 dashboard at `/ops/`.
 
+Evaluator credentials were sent privately to the professor. They are not
+stored in this repository.
+
 | Audience | Page | Transport | Guarantee |
 | --- | --- | --- | --- |
 | Jurados (6,400) | `/jury/` | HTTP POST + `idem` + offline outbox (IndexedDB) | An acta counts once; every attempt gets an unambiguous answer |
