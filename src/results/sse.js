@@ -1,7 +1,7 @@
 import { createConnection } from './topics.js';
 
-// Transporte público: Server-Sent Events. El fan-out solo ve send(string), así
-// que cambiar de transporte no toca topics ni fanout.
+// Public transport: Server-Sent Events. The fan-out only sees send(string), so
+// changing the transport does not touch topics or fanout.
 export function openSseConnection(req, res, instanceId) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -12,11 +12,11 @@ export function openSseConnection(req, res, instanceId) {
   });
   req.socket.setNoDelay(true);
   req.socket.setKeepAlive(true);
-  res.write(': conectado\n\n');
+  res.write(': connected\n\n');
 
   const conn = createConnection((frame) => {
     if (!res.destroyed) res.write(frame);
-  });
+  }, { bufferedBytes: () => res.writableLength });
   conn.close = () => res.end();
   return conn;
 }

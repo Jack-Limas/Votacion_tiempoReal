@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createConnection, createTopicRegistry, parseSubscriptions } from '../../src/results/topics.js';
 
-test('alta y recorrido: cada tópico solo contiene sus suscriptores', () => {
+test('subscribe and walk: each topic only holds its subscribers', () => {
   const registry = createTopicRegistry();
   const a = createConnection(() => {});
   const b = createConnection(() => {});
@@ -20,7 +20,7 @@ test('alta y recorrido: cada tópico solo contiene sus suscriptores', () => {
   assert.deepEqual(registry.counts(), { 'mun:11': 1, dep: 1, 'pto:176': 1 });
 });
 
-test('baja: al cerrar la conexión desaparece de todos sus tópicos', () => {
+test('remove: a closed connection leaves all its topics', () => {
   const registry = createTopicRegistry();
   const a = createConnection(() => {});
   const b = createConnection(() => {});
@@ -41,7 +41,7 @@ test('baja: al cerrar la conexión desaparece de todos sus tópicos', () => {
   assert.equal(registry.topicCount, 0);
 });
 
-test('baja de un solo tópico conserva los demás', () => {
+test('unsubscribing one topic keeps the others', () => {
   const registry = createTopicRegistry();
   const a = createConnection(() => {});
   registry.subscribe(a, 'mun:11', '1-0');
@@ -51,7 +51,7 @@ test('baja de un solo tópico conserva los demás', () => {
   assert.equal(a.cursors.has('mun:11'), false);
 });
 
-test('parseSubscriptions acepta tópicos con y sin cursor', () => {
+test('parseSubscriptions accepts topics with and without cursor', () => {
   assert.deepEqual(parseSubscriptions('mun:11@1700000000000-3,dep,pto:176@5-0'), [
     { topic: 'mun:11', cursor: '1700000000000-3' },
     { topic: 'dep', cursor: null },
@@ -59,10 +59,10 @@ test('parseSubscriptions acepta tópicos con y sin cursor', () => {
   ]);
 });
 
-test('parseSubscriptions rechaza tópicos, cursores y cantidades inválidos', () => {
-  assert.throws(() => parseSubscriptions(''), /obligatorio/);
-  assert.throws(() => parseSubscriptions('mesa:4201'), /Tópico inválido/);
-  assert.throws(() => parseSubscriptions('mun:11@abc'), /Cursor inválido/);
-  assert.throws(() => parseSubscriptions('mun:1,mun:2,mun:3', { maxTopics: 2 }), /Máximo 2/);
-  assert.throws(() => parseSubscriptions(['dep', 'mun:1']), /obligatorio/);
+test('parseSubscriptions rejects invalid topics, cursors and counts', () => {
+  assert.throws(() => parseSubscriptions(''), /required/);
+  assert.throws(() => parseSubscriptions('mesa:4201'), /Invalid topic/);
+  assert.throws(() => parseSubscriptions('mun:11@abc'), /Invalid cursor/);
+  assert.throws(() => parseSubscriptions('mun:1,mun:2,mun:3', { maxTopics: 2 }), /At most 2/);
+  assert.throws(() => parseSubscriptions(['dep', 'mun:1']), /required/);
 });

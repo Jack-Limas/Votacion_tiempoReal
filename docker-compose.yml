@@ -51,11 +51,11 @@ services:
       - app
 
   # Generador de carga dentro de la red de compose (no pasa por el reenvío de
-  # puertos del host). Uso: docker compose run --rm carga --conexiones=10000
-  carga:
+  # puertos del host). Uso: docker compose run --rm load --conexiones=10000
+  load:
     image: votacion-tiempo-real:local
-    profiles: ["carga"]
-    entrypoint: ["node", "scripts/carga.js"]
+    profiles: ["load"]
+    entrypoint: ["node", "scripts/load.js"]
     environment:
       BASE_URL: http://nginx
       REDIS_URL: redis://valkey:6379

@@ -1,65 +1,66 @@
-// Fan-out de eventos del stream hacia las conexiones locales suscritas (RF-4).
+// Fan-out of stream events to the local subscribed connections (RF-4).
 //
-// batched (por defecto): los eventos NO se envían al llegar. Se acumulan en un
-//   mapa de tópicos sucios (último valor absoluto por campo + motivo) y cada
-//   FLUSH_MS se arma UN mensaje por tópico, se serializa UNA vez y se envía en
-//   lotes de BATCH_SIZE cediendo el Event Loop con setImmediate entre lotes.
-// naive: cada evento se envía a cada suscriptor en un bucle síncrono (solo para
-//   comparar en la prueba de carga).
+// batched (default): events are NOT sent on arrival. They are folded into a
+//   map of dirty topics (last absolute value per field + reason) and every
+//   FLUSH_MS ONE message per topic is built, serialized ONCE and sent in
+//   batches of BATCH_SIZE, yielding the Event Loop with setImmediate between
+//   batches.
+// naive: every event is sent to every subscriber in a synchronous loop (only
+//   for the load-test comparison).
 //
-// En ambos modos el costo es O(k) por tópico (k = suscriptores locales), no
-// O(conexiones de la instancia).
+// In both modes the cost is O(k) per topic (k = local subscribers), not
+// O(connections of the instance).
 import { compareIds, parseId } from './stream.js';
-import { PENDIENTE } from './topics.js';
+import { PENDING } from './topics.js';
 
-// setImmediate cede de verdad: deja correr I/O (sockets, timers) antes de
-// seguir. process.nextTick y las promesas resueltas son microtareas y se
-// ejecutan antes de volver al Event Loop, así que no cederían nada.
-export const ceder = () => new Promise((resolve) => setImmediate(resolve));
+// setImmediate really yields: pending I/O (sockets, timers) runs before the
+// loop continues. process.nextTick and resolved promises are microtasks and
+// run before returning to the Event Loop, so they would yield nothing.
+export const yieldToLoop = () => new Promise((resolve) => setImmediate(resolve));
 
-export function serializar(mensaje) {
-  return `data: ${JSON.stringify(mensaje)}\n\n`;
+export function serialize(message) {
+  return `data: ${JSON.stringify(message)}\n\n`;
 }
 
-export function mensajeDelta(topic, upTo, cambios, motivo) {
-  const mensaje = { t: 'delta', topic, upTo, cambios };
-  if (motivo) mensaje.motivo = motivo;
-  return mensaje;
+export function deltaMessage(topic, upTo, changes, reason) {
+  const message = { t: 'delta', topic, upTo, changes };
+  if (reason) message.reason = reason;
+  return message;
 }
 
-// Una corrección que baja algún número viaja con su explicación para la UI.
-export function motivoDe(evento) {
-  return evento.tipo === 'correccion' && evento.baja
-    ? { tipo: 'correccion', acta: evento.acta, version: evento.version }
+// A correction that lowers a number travels with its explanation for the UI.
+export function reasonOf(event) {
+  return event.type === 'correction' && event.decreased
+    ? { type: 'correction', acta: event.acta, version: event.version }
     : null;
 }
 
-// Acumula un evento sobre el delta de un tópico: último valor absoluto por campo.
-export function acumular(destino, evento, topic) {
-  const cambios = evento.cambios[topic];
-  if (!cambios) return false;
-  Object.assign(destino.cambios, cambios);
-  const motivo = motivoDe(evento);
-  if (motivo) destino.motivo = motivo;
+// Folds an event into the delta of a topic: last absolute value per field.
+export function accumulate(target, event, topic) {
+  const changes = event.changes[topic];
+  if (!changes) return false;
+  Object.assign(target.changes, changes);
+  const reason = reasonOf(event);
+  if (reason) target.reason = reason;
   return true;
 }
 
-// Reduce varias entradas del stream a UN delta para un tópico.
-export function reducirEntradas(entries, topic) {
-  const destino = { cambios: {}, motivo: null, eventos: 0 };
-  for (const { evento } of entries) {
-    if (acumular(destino, evento, topic)) destino.eventos += 1;
+// Reduces several stream entries to ONE delta for a topic.
+export function reduceEntries(entries, topic) {
+  const target = { changes: {}, reason: null, events: 0 };
+  for (const { event } of entries) {
+    if (accumulate(target, event, topic)) target.events += 1;
   }
-  return destino;
+  return target;
 }
 
-// Entrega un frame ya serializado si avanza el cursor de la conexión en ese
-// tópico. upTo <= cursor se descarta: evita retrocesos cuando la conexión ya
-// tiene un estado más nuevo que el lector de la instancia.
-export function entregar(conn, topic, upTo, frame) {
+// Delivers an already serialized frame if it advances the connection cursor
+// for that topic. upTo <= cursor is dropped: the connection already holds a
+// newer state than the instance reader, so nothing ever goes backwards.
+export function deliver(conn, topic, upTo, frame) {
   const cursor = conn.cursors.get(topic);
-  if (cursor === PENDIENTE) {
-    // La conexión aún recibe su snapshot/replay: se guarda y se filtra después.
+  if (cursor === PENDING) {
+    // The connection is still receiving its snapshot/replay: keep it for later.
     conn.pending.push([topic, upTo, frame]);
     return false;
   }
@@ -69,11 +70,11 @@ export function entregar(conn, topic, upTo, frame) {
   return true;
 }
 
-const metricasNulas = {
-  eventoProcesado() {},
-  mensajesEmitidos() {},
-  descartados() {},
-  retraso() {}
+const noMetrics = {
+  eventProcessed() {},
+  messagesSent() {},
+  dropped() {},
+  publishDelay() {}
 };
 
 export function createFanout({
@@ -82,118 +83,117 @@ export function createFanout({
   flushMs = 1000,
   batchSize = 100,
   heartbeatMs = 15000,
-  metrics = metricasNulas,
+  metrics = noMetrics,
   logger = console
 }) {
-  let sucios = new Map();
-  let recepciones = [];
-  let ultimoId = null;
-  let enCurso = null;
-  let pendiente = false;
+  let dirty = new Map();
+  let receivedAts = [];
+  let lastId = null;
+  let inFlight = null;
+  let again = false;
   const timers = [];
 
-  function acumularEvento(evento) {
-    let interesa = false;
-    for (const topic of Object.keys(evento.cambios)) {
-      // Un tópico sin suscriptores locales no cuesta más que un Map.get.
+  function accumulateEvent(event) {
+    let relevant = false;
+    for (const topic of Object.keys(event.changes)) {
+      // A topic without local subscribers costs one Map.get.
       if (registry.subscribers(topic).size === 0) continue;
-      let sucio = sucios.get(topic);
-      if (!sucio) {
-        sucio = { cambios: {}, motivo: null };
-        sucios.set(topic, sucio);
+      let entry = dirty.get(topic);
+      if (!entry) {
+        entry = { changes: {}, reason: null };
+        dirty.set(topic, entry);
       }
-      acumular(sucio, evento, topic);
-      interesa = true;
+      accumulate(entry, event, topic);
+      relevant = true;
     }
-    if (interesa) recepciones.push(evento.ts_recepcion);
+    if (relevant) receivedAts.push(event.receivedAt);
   }
 
-  function enviarIngenuo(id, evento) {
+  function sendNaive(id, event) {
     const upTo = parseId(id);
-    let enviados = 0;
-    let descartados = 0;
-    for (const [topic, cambios] of Object.entries(evento.cambios)) {
+    let sent = 0;
+    let dropped = 0;
+    for (const [topic, changes] of Object.entries(event.changes)) {
       const subscribers = registry.subscribers(topic);
       if (subscribers.size === 0) continue;
-      const frame = serializar(mensajeDelta(topic, id, cambios, motivoDe(evento)));
+      const frame = serialize(deltaMessage(topic, id, changes, reasonOf(event)));
       for (const conn of subscribers) {
-        if (entregar(conn, topic, upTo, frame)) enviados += 1;
-        else descartados += 1;
+        if (deliver(conn, topic, upTo, frame)) sent += 1;
+        else dropped += 1;
       }
     }
-    if (enviados > 0) {
-      metrics.mensajesEmitidos(enviados);
-      metrics.retraso(Date.now() - evento.ts_recepcion);
+    if (sent > 0) {
+      metrics.messagesSent(sent);
+      metrics.publishDelay(Date.now() - event.receivedAt);
     }
-    metrics.descartados(descartados);
+    metrics.dropped(dropped);
   }
 
-  async function vaciar() {
-    // Se toma la ventana completa y se deja un mapa nuevo para lo que llegue
-    // mientras se envía.
-    const ventana = sucios;
-    const ventanaRecepciones = recepciones;
-    const upToTexto = ultimoId;
-    sucios = new Map();
-    recepciones = [];
-    if (ventana.size === 0) return;
+  async function drain() {
+    // Take the whole window and leave a fresh map for what arrives meanwhile.
+    const window = dirty;
+    const windowReceivedAts = receivedAts;
+    const upToText = lastId;
+    dirty = new Map();
+    receivedAts = [];
+    if (window.size === 0) return;
 
-    const upTo = parseId(upToTexto);
-    let enLote = 0;
-    let enviados = 0;
-    let descartados = 0;
-    for (const [topic, { cambios, motivo }] of ventana) {
+    const upTo = parseId(upToText);
+    let inBatch = 0;
+    let sent = 0;
+    let dropped = 0;
+    for (const [topic, { changes, reason }] of window) {
       const subscribers = registry.subscribers(topic);
       if (subscribers.size === 0) continue;
-      const frame = serializar(mensajeDelta(topic, upToTexto, cambios, motivo));
+      const frame = serialize(deltaMessage(topic, upToText, changes, reason));
       for (const conn of subscribers) {
-        if (entregar(conn, topic, upTo, frame)) enviados += 1;
-        else descartados += 1;
-        enLote += 1;
-        if (enLote >= batchSize) {
-          enLote = 0;
-          await ceder();
+        if (deliver(conn, topic, upTo, frame)) sent += 1;
+        else dropped += 1;
+        inBatch += 1;
+        if (inBatch >= batchSize) {
+          inBatch = 0;
+          await yieldToLoop();
         }
       }
     }
-    metrics.mensajesEmitidos(enviados);
-    metrics.descartados(descartados);
-    const ahora = Date.now();
-    for (const ts of ventanaRecepciones) metrics.retraso(ahora - ts);
+    metrics.messagesSent(sent);
+    metrics.dropped(dropped);
+    const now = Date.now();
+    for (const ts of windowReceivedAts) metrics.publishDelay(now - ts);
   }
 
-  // Los flushes no se solapan: si toca uno mientras el anterior sigue enviando,
-  // la ventana nueva sigue acumulando y se envía en cuanto termina el anterior.
+  // Flushes never overlap: a flush requested while one is sending keeps
+  // accumulating and is sent, merged, as soon as the previous one ends.
   function flush() {
-    if (enCurso) {
-      pendiente = true;
-      return enCurso;
+    if (inFlight) {
+      again = true;
+      return inFlight;
     }
-    enCurso = (async () => {
+    inFlight = (async () => {
       try {
         do {
-          pendiente = false;
-          await vaciar();
-        } while (pendiente);
+          again = false;
+          await drain();
+        } while (again);
       } catch (error) {
-        logger.error('Error en el flush del fan-out:', error);
+        logger.error('Fan-out flush failed:', error);
       } finally {
-        enCurso = null;
+        inFlight = null;
       }
     })();
-    return enCurso;
+    return inFlight;
   }
 
-  // Comentario SSE periódico para que el balanceador no cierre conexiones
-  // inactivas (el ALB corta a los 60 s por defecto). También va por lotes.
-  async function latido() {
-    let enLote = 0;
+  // Periodic SSE comment so load balancers do not close idle connections
+  // (an AWS ALB cuts at 60 s by default). Also batched.
+  async function heartbeat() {
+    let inBatch = 0;
     for (const conn of registry.connections) {
-      conn.send(': latido\n\n');
-      enLote += 1;
-      if (enLote >= batchSize) {
-        enLote = 0;
-        await ceder();
+      conn.send(': heartbeat\n\n');
+      inBatch += 1;
+      if (inBatch >= batchSize) {
+        inBatch = 0;
+        await yieldToLoop();
       }
     }
   }
@@ -201,13 +201,13 @@ export function createFanout({
   return {
     mode,
     onEntries(entries) {
-      for (const { id, evento } of entries) {
-        metrics.eventoProcesado(registry.connections.size);
-        ultimoId = id;
+      for (const { id, event } of entries) {
+        metrics.eventProcessed(registry.connections.size);
+        lastId = id;
         if (mode === 'naive') {
-          enviarIngenuo(id, evento);
+          sendNaive(id, event);
         } else {
-          acumularEvento(evento);
+          accumulateEvent(event);
         }
       }
     },
@@ -215,7 +215,7 @@ export function createFanout({
     start() {
       if (mode === 'batched') timers.push(setInterval(flush, flushMs));
       timers.push(setInterval(() => {
-        latido().catch((error) => logger.error('Error enviando latidos:', error));
+        heartbeat().catch((error) => logger.error('Heartbeat failed:', error));
       }, heartbeatMs));
     },
     stop() {

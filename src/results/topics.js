@@ -1,23 +1,26 @@
-// Registro de tópicos (RF-5).
-//   topics: Map<topic, Set<conexion>>   y en cada conexión: Set<topic> + cursor por tópico.
-//   alta O(1), baja O(1) por tópico, recorrido O(k) con k = suscriptores del tópico.
-// Nunca se recorren todas las conexiones de la instancia para entregar un evento.
+// Topic registry (RF-5).
+//   topics: Map<topic, Set<connection>>, and on each connection a Set<topic>
+//   plus one cursor per topic. Subscribe O(1), unsubscribe O(1) per topic,
+//   delivery O(k) with k = subscribers of the topic. Delivering an event never
+//   walks all the connections of the instance.
 
 const TOPIC_RE = /^(dep|mun:\d{1,6}|pto:\d{1,6})$/;
 const CURSOR_RE = /^\d{1,20}-\d{1,20}$/;
-const VACIO = new Set();
+const EMPTY = new Set();
 
-// Cursor de un tópico cuya reanudación (snapshot o replay) todavía no termina.
-export const PENDIENTE = Symbol('pendiente');
+// Cursor of a topic whose resume (snapshot or replay) has not finished yet.
+export const PENDING = Symbol('pending');
 
-let secuencia = 0;
+let sequence = 0;
 
-// La conexión no sabe de transporte: solo expone send(string).
-export function createConnection(send) {
-  secuencia += 1;
+// A connection knows nothing about the transport: it only exposes send(string)
+// and, optionally, bufferedBytes() for back-pressure.
+export function createConnection(send, { bufferedBytes = () => 0 } = {}) {
+  sequence += 1;
   return {
-    id: secuencia,
+    id: sequence,
     send,
+    bufferedBytes,
     topics: new Set(),
     cursors: new Map(),
     pending: null
@@ -63,7 +66,7 @@ export function createTopicRegistry() {
       connections.delete(conn);
     },
     subscribers(topic) {
-      return topics.get(topic) ?? VACIO;
+      return topics.get(topic) ?? EMPTY;
     },
     counts() {
       const result = {};
@@ -81,21 +84,21 @@ export function createTopicRegistry() {
 // "mun:11@1700000000000-0,dep" -> [{ topic: 'mun:11', cursor: '1700000000000-0' }, { topic: 'dep', cursor: null }]
 export function parseSubscriptions(raw, { maxTopics = 10 } = {}) {
   if (typeof raw !== 'string' || raw.trim() === '') {
-    throw new Error('El parámetro sub es obligatorio, p. ej. sub=mun:11,dep.');
+    throw new Error('The sub parameter is required, e.g. sub=mun:11,dep.');
   }
   const result = new Map();
-  for (const parte of raw.split(',')) {
-    const [topic, cursor, ...sobra] = parte.trim().split('@');
-    if (!TOPIC_RE.test(topic) || sobra.length > 0) {
-      throw new Error(`Tópico inválido: ${parte}. Use dep, mun:{id} o pto:{id}.`);
+  for (const part of raw.split(',')) {
+    const [topic, cursor, ...extra] = part.trim().split('@');
+    if (!TOPIC_RE.test(topic) || extra.length > 0) {
+      throw new Error(`Invalid topic: ${part}. Use dep, mun:{id} or pto:{id}.`);
     }
     if (cursor !== undefined && !CURSOR_RE.test(cursor)) {
-      throw new Error(`Cursor inválido para ${topic}: ${cursor}.`);
+      throw new Error(`Invalid cursor for ${topic}: ${cursor}.`);
     }
     result.set(topic, cursor ?? null);
   }
   if (result.size > maxTopics) {
-    throw new Error(`Máximo ${maxTopics} tópicos por conexión.`);
+    throw new Error(`At most ${maxTopics} topics per connection.`);
   }
   return [...result].map(([topic, cursor]) => ({ topic, cursor }));
 }

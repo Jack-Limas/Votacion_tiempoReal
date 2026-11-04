@@ -9,8 +9,8 @@ import {
   redisSubClient
 } from './config/redis.js';
 import { createIdempotencyService } from './services/idempotencyService.js';
-import { createPublico } from './results/index.js';
-import { createPublicoRoutes } from './routes/publicoRoutes.js';
+import { createResults } from './results/index.js';
+import { createResultsRoutes } from './routes/resultsRoutes.js';
 import { createWebSocketServer } from './sockets/index.js';
 import { createVerificationModule } from './verification/index.js';
 
@@ -18,9 +18,9 @@ export const verification = createVerificationModule({
   redis: redisClient,
   subscriber: redisSubClient
 });
-export const publico = createPublico({ redis: redisClient });
+export const results = createResults({ redis: redisClient });
 export const app = createApp(createIdempotencyService(redisClient), {
-  routers: [verification.router, createPublicoRoutes(publico)],
+  routers: [verification.router, createResultsRoutes(results)],
   actaMiddleware: [verification.actaRateLimiter]
 });
 export const server = createServer(app);
@@ -29,18 +29,18 @@ export const webSocketServer = createWebSocketServer(server, { routes: [verifica
 export async function startServer() {
   await connectRedisClients();
   await verification.start();
-  await publico.start();
+  await results.start();
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(config.port, config.host, resolve);
   });
-  console.log(`API, WebSocket y SSE listos en ${config.host}:${config.port} (instancia ${config.instanceId}).`);
+  console.log(`API, WebSocket and SSE ready on ${config.host}:${config.port} (instance ${config.instanceId}).`);
 }
 
 export async function stopServer() {
   const stopServices = await Promise.allSettled([
     verification.stop(),
-    publico.stop()
+    results.stop()
   ]);
 
   for (const socket of webSocketServer.clients) {
@@ -66,7 +66,7 @@ export async function stopServer() {
     .map((result) => result.reason);
 
   if (errors.length > 0) {
-    throw new AggregateError(errors, 'Ocurrieron errores al detener el servidor.');
+    throw new AggregateError(errors, 'Errors while stopping the server.');
   }
 }
 
@@ -74,11 +74,11 @@ async function run() {
   await startServer();
 
   const shutdown = async (signal) => {
-    console.log(`Recibida señal ${signal}; cerrando el servidor.`);
+    console.log(`Received ${signal}; shutting down.`);
     try {
       await stopServer();
     } catch (error) {
-      console.error('Error durante el cierre:', error);
+      console.error('Error during shutdown:', error);
       process.exitCode = 1;
     }
   };
@@ -89,11 +89,11 @@ async function run() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   run().catch(async (error) => {
-    console.error('No se pudo iniciar el servicio:', error);
+    console.error('Could not start the service:', error);
     try {
       await stopServer();
     } catch (shutdownError) {
-      console.error('También falló el cierre del servicio:', shutdownError);
+      console.error('Shutdown also failed:', shutdownError);
     }
     process.exitCode = 1;
   });

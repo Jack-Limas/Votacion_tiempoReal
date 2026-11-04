@@ -1,0 +1,13 @@
+// Redis key names of the results module. All of them carry the hash-tagged
+// prefix ({results}) so the Lua scripts stay valid on Redis Cluster.
+export function createKeys(prefix) {
+  return {
+    stream: `${prefix}:st:events`,
+    catalog: `${prefix}:catalog`,
+    // dep -> acc:dep, mun:11 -> acc:mun:11, pto:176 -> acc:pto:176
+    total: (topic) => `${prefix}:acc:${topic}`,
+    mesa: (id) => `${prefix}:acc:mesa:${id}`,
+    metrics: (instance) => `${prefix}:metrics:${instance}`,
+    metricsPattern: `${prefix}:metrics:*`
+  };
+}

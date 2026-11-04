@@ -1,13 +1,13 @@
-// Lector del stream global st:eventos. Cada instancia lee TODOS los eventos
-// (sin grupos de consumidores) con XREAD BLOCK en una conexión dedicada.
+// Reader of the global events stream. Every instance reads ALL events (no
+// consumer group) with XREAD BLOCK on a dedicated connection.
 
-// Los IDs de stream se comparan de forma numérica (ms y secuencia), nunca como
-// texto: '1700000000000-10' es mayor que '1700000000000-9'.
+// Stream IDs are compared numerically (ms and sequence), never as text:
+// '1700000000000-10' is greater than '1700000000000-9'.
 export function parseId(id) {
-  const guion = id.indexOf('-');
+  const dash = id.indexOf('-');
   return {
-    ms: Number(guion === -1 ? id : id.slice(0, guion)),
-    seq: guion === -1 ? 0 : Number(id.slice(guion + 1))
+    ms: Number(dash === -1 ? id : id.slice(0, dash)),
+    seq: dash === -1 ? 0 : Number(id.slice(dash + 1))
   };
 }
 
@@ -20,13 +20,14 @@ export function compareIds(a, b) {
 }
 
 export function decodeEntry({ id, message }) {
-  return { id, evento: JSON.parse(message.e) };
+  return { id, event: JSON.parse(message.e) };
 }
 
 export function createStreamReader({
   redis,
   streamKey,
   onEntries,
+  onStatus = () => {},
   blockMs = 5000,
   count = 200,
   logger = console
@@ -39,13 +40,14 @@ export function createStreamReader({
   async function readLoop() {
     while (running) {
       try {
-        // '$' solo en la primera lectura; después, siempre el último ID recibido.
-        // La primera lectura bloquea sin límite (BLOCK 0) para no tener que
-        // repetir '$' tras un timeout, lo que perdería eventos.
+        // '$' only on the first read, the last received ID afterwards. The
+        // first read blocks without limit (BLOCK 0) so '$' is never repeated
+        // after a timeout, which would skip events.
         const reply = await client.xRead(
           { key: streamKey, id: lastId ?? '$' },
           { BLOCK: lastId ? blockMs : 0, COUNT: count }
         );
+        onStatus('up');
         if (!reply) continue;
         const entries = [];
         for (const stream of reply) {
@@ -58,7 +60,8 @@ export function createStreamReader({
         await onEntries(entries);
       } catch (error) {
         if (!running) break;
-        logger.error('Error leyendo el stream de eventos:', error);
+        onStatus('down');
+        logger.error('Error reading the events stream:', error.message);
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
@@ -70,7 +73,7 @@ export function createStreamReader({
     },
     async start() {
       client = redis.duplicate();
-      client.on('error', (error) => logger.error('Error del cliente Redis del stream:', error));
+      client.on('error', (error) => logger.error('Events stream Redis client error:', error.message));
       await client.connect();
       running = true;
       loop = readLoop();

@@ -6,12 +6,12 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "test": "node --test",
-    "test:unit": "node --test test/*.test.js test/unit/*.test.js",
-    "test:integration": "node --test test/integration/*.test.js",
-    "simular": "node scripts/simular-actas.js",
-    "carga": "node scripts/carga.js",
-    "estimar": "node scripts/estimar-mensajes.js"
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test:unit": "node --test \"test/*.test.js\" \"test/unit/*.test.js\"",
+    "test:integration": "node --test --test-concurrency=1 \"test/integration/*.test.js\"",
+    "simulate": "node scripts/simulate-actas.js",
+    "load": "node scripts/load.js",
+    "estimate": "node scripts/estimate-messages.js"
   },
   "engines": {
     "node": ">=20"

@@ -1,0 +1,135 @@
+{
+  "mode": "batched",
+  "connections": 8292,
+  "instances": 8,
+  "actas": {
+    "sent": 3817,
+    "byKind": {
+      "new": 3248,
+      "doubtful": 272,
+      "resend": 240,
+      "correction": 57
+    },
+    "byStatus": {
+      "200": 236,
+      "201": 3253,
+      "202": 269
+    },
+    "errors": 59,
+    "seconds": 120.8
+  },
+  "eventsPerInstance": [
+    3245,
+    3245,
+    3245,
+    3245,
+    3245,
+    3245,
+    3245,
+    3245
+  ],
+  "messagesSent": 584944,
+  "naiveMessages": 26907540,
+  "reduction": 46,
+  "messagesReceivedByClients": 603332,
+  "connectionsClosedDuringTest": 0,
+  "eventLoopPerSecond": {
+    "p50OfP99": 23.42,
+    "p99OfP99": 499.87,
+    "maxOfP99": 932.67,
+    "max": 932.67
+  },
+  "eventLoopSinceStart": [
+    {
+      "instance": "1b179d0eeee3",
+      "p50": 0.27,
+      "p99": 83.85,
+      "max": 2141.68
+    },
+    {
+      "instance": "3fba267e888d",
+      "p50": 0.26,
+      "p99": 82.08,
+      "max": 8215.03
+    },
+    {
+      "instance": "40dff0f4f415",
+      "p50": 0.27,
+      "p99": 80.37,
+      "max": 2995.22
+    },
+    {
+      "instance": "56122610f423",
+      "p50": 0.26,
+      "p99": 77.43,
+      "max": 4427.57
+    },
+    {
+      "instance": "581b0a2fcb7a",
+      "p50": 0.27,
+      "p99": 75.66,
+      "max": 2921.82
+    },
+    {
+      "instance": "8561fd4b0c51",
+      "p50": 0.26,
+      "p99": 69.5,
+      "max": 3536.28
+    },
+    {
+      "instance": "916d9e5af89d",
+      "p50": 0.27,
+      "p99": 89.75,
+      "max": 2290.58
+    },
+    {
+      "instance": "f49eb0d4e0ed",
+      "p50": 0.27,
+      "p99": 82.86,
+      "max": 2428.99
+    }
+  ],
+  "publishDelayMs": [
+    {
+      "instance": "1b179d0eeee3",
+      "p50": 770,
+      "p99": 3669
+    },
+    {
+      "instance": "3fba267e888d",
+      "p50": 702,
+      "p99": 3029
+    },
+    {
+      "instance": "40dff0f4f415",
+      "p50": 702,
+      "p99": 3383
+    },
+    {
+      "instance": "56122610f423",
+      "p50": 789,
+      "p99": 3627
+    },
+    {
+      "instance": "581b0a2fcb7a",
+      "p50": 713,
+      "p99": 2881
+    },
+    {
+      "instance": "8561fd4b0c51",
+      "p50": 698,
+      "p99": 2759
+    },
+    {
+      "instance": "916d9e5af89d",
+      "p50": 689,
+      "p99": 3369
+    },
+    {
+      "instance": "f49eb0d4e0ed",
+      "p50": 826,
+      "p99": 2875
+    }
+  ],
+  "seconds": 49
+}
