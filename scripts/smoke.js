@@ -46,7 +46,9 @@ for (let i = 0; i < 24; i += 1) instances.add((await (await fetch(`${BASE}/whoam
 check('requests spread over several instances (no sticky sessions)', instances.size >= 2, `${instances.size} distinct instances in 24 requests`);
 
 // ---- Public client over WebSocket, following one test mesa's puesto ----
-const mesa = 6000 + Math.floor(Math.random() * 400);
+// Mesa ids outside the real catalog (1-6400) so a smoke run never collides
+// with simulated or real actas.
+const mesa = 100_000 + Math.floor(Math.random() * 800_000) * 2;
 const puesto = 9000 + Math.floor(Math.random() * 900);
 const topic = `pto:${puesto}`;
 const publicMessages = [];

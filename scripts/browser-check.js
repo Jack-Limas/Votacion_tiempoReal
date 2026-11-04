@@ -49,6 +49,8 @@ await check('/jury/', async (page) => {
   await page.waitForSelector('#votes input');
   const version = Date.now() % 1_000_000;
   await page.$eval('input[name=version]', (n, v) => { n.value = String(v); }, version);
+  // A mesa id outside the real catalog, so the check never collides with data.
+  await page.$eval('input[name=mesa]', (n, v) => { n.value = String(v); }, 100_000 + version);
   await page.click('button[type=submit]');
   await page.waitForFunction(() => /Registered|verification/.test(document.querySelector('#queue')?.textContent ?? ''), { timeout: 10_000 });
   return `(${await page.$eval('#queue li .tag', (n) => n.textContent)})`;
