@@ -136,7 +136,7 @@ local Redis. Design, Redis keys, TTLs, costs and failure behaviour are in
 Los jurados envían actas por `POST /api/actas`. El mismo script Lua que suma el
 acta escribe el evento en el stream `st:eventos`. Cada instancia lee ese stream
 y lo reparte por SSE a los clientes suscritos. El diseño y las cifras están en
-[DISENO.md](DISENO.md).
+[docs/results-design.md](docs/results-design.md).
 
 ### Correr en local
 

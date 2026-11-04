@@ -42,7 +42,7 @@ its evidence. **Missing** = not implemented.
 
 | Role | Why it is needed | Delivered | Evidence | Gap | Final |
 | --- | --- | --- | --- | --- | --- |
-| Broadcast backplane | An acta received on instance 3 must reach clients on the other 7 | Done | Global stream `st:eventos` read by every instance; Pub/Sub for consoles | Channel design argued in `DISENO.md` | pending |
+| Broadcast backplane | An acta received on instance 3 must reach clients on the other 7 | Done | Global stream `st:eventos` read by every instance; Pub/Sub for consoles | Channel design argued in `docs/results-design.md` | pending |
 | History for recovery | Clients and servers that were away must catch up | Done | Stream with `MAXLEN ~ 10000`, measured ~725 B/event | — | pending |
 | Totals | Hot readable/updatable totals and candidate ranking | Partial | Hashes per level | Ranking requires reading the whole hash (no sorted structure); duplicated `aggregate` hash with wrong semantics | pending |
 | Atomic composite operation | Apply, revert and update 4 levels as one | Done | `aplicarActa.lua` | Approval of doubtful actas did not reuse it | pending |
