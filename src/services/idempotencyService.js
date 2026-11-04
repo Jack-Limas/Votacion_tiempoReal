@@ -74,7 +74,10 @@ export function createIdempotencyService(redis, {
             keys.total(`mun:${acta.municipio}`),
             keys.total('dep'),
             keys.stream,
-            keys.catalog
+            keys.catalog,
+            keys.rank(`pto:${acta.puesto}`),
+            keys.rank(`mun:${acta.municipio}`),
+            keys.rank('dep')
           ],
           arguments: [
             digest,

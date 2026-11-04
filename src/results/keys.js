@@ -7,6 +7,8 @@ export function createKeys(prefix) {
     // dep -> acc:dep, mun:11 -> acc:mun:11, pto:176 -> acc:pto:176
     total: (topic) => `${prefix}:acc:${topic}`,
     mesa: (id) => `${prefix}:acc:mesa:${id}`,
+    // Candidate ranking per topic (ZSET candidate -> votes).
+    rank: (topic) => `${prefix}:rank:${topic}`,
     metrics: (instance) => `${prefix}:metrics:${instance}`,
     metricsPattern: `${prefix}:metrics:*`
   };

@@ -95,6 +95,15 @@ test('RF-2: every arrival order of v1, v2, v2 (other figures) and v3 converges t
   console.log(`  ${orders.length} arrival orders, 1 final state`);
 });
 
+test('the candidate ranking ZSET matches the hash totals in every arrival order', options, async (t) => {
+  for (const order of [[V1, V2, V3], [V3, V2_OTHER, V1], [V2, V3, V1, V2_OTHER]]) {
+    const { client, keys, service } = await withPrefix(t);
+    for (const item of order) await service.registerActa(item, validateActa(item));
+    const ranking = await client.zRangeWithScores(keys.rank('dep'), 0, -1, { REV: true });
+    assert.deepEqual(ranking.map(({ value, score }) => [value, score]), [['C1', 95], ['C2', 55], ['C3', 1]]);
+  }
+});
+
 test('RF-2: a late v2 after v3 is reported as superseded and does not move the totals back', options, async (t) => {
   const { client, keys, service } = await withPrefix(t);
   await service.registerActa(V1, validateActa(V1));

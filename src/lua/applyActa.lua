@@ -4,6 +4,7 @@
 -- KEYS[1] idem  KEYS[2] verification stream
 -- KEYS[3] acc:mesa:{id}  KEYS[4] acc:pto:{id}  KEYS[5] acc:mun:{id}  KEYS[6] acc:dep
 -- KEYS[7] events stream  KEYS[8] catalog (total mesas per topic)
+-- KEYS[9] rank:pto:{id}  KEYS[10] rank:mun:{id}  KEYS[11] rank:dep (candidate ZSETs)
 -- ARGV[1] request digest  ARGV[2] result  ARGV[3] ttl  ARGV[4] votos  ARGV[5] accepted
 -- ARGV[6] acta  ARGV[7] idem  ARGV[8] receivedAt (ms)  ARGV[9] stream MAXLEN
 -- ARGV[10] content digest (votos + sufragantes)
@@ -101,14 +102,17 @@ if ARGV[5] == '1' then
     -- Puesto, municipio and department: HINCRBY returns the new absolute
     -- value, which is what travels in the event.
     local levels = {
-      { key = KEYS[4], topic = 'pto:' .. acta.puesto },
-      { key = KEYS[5], topic = 'mun:' .. acta.municipio },
-      { key = KEYS[6], topic = 'dep' }
+      { key = KEYS[4], rank = KEYS[9], topic = 'pto:' .. acta.puesto },
+      { key = KEYS[5], rank = KEYS[10], topic = 'mun:' .. acta.municipio },
+      { key = KEYS[6], rank = KEYS[11], topic = 'dep' }
     }
     for _, level in ipairs(levels) do
       local delta = {}
       for candidate, difference in pairs(differences) do
         delta['v:' .. candidate] = redis.call('HINCRBY', level.key, 'v:' .. candidate, difference)
+        -- Sorted set kept in step with the hash: the ranking is ZREVRANGE,
+        -- O(log C + k), without reading every candidate.
+        redis.call('ZINCRBY', level.rank, difference, candidate)
         if difference < 0 then
           decreased = true
         end
