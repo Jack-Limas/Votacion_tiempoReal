@@ -9,6 +9,9 @@ export function createKeys(prefix) {
     mesa: (id) => `${prefix}:acc:mesa:${id}`,
     // Candidate ranking per topic (ZSET candidate -> votes).
     rank: (topic) => `${prefix}:rank:${topic}`,
+    // Last verification decision applied per case, with its fencing token.
+    decision: (caseId) => `${prefix}:decision:${caseId}`,
+    decisionRequest: (caseId, token) => `${prefix}:decision-request:${caseId}:${token}`,
     metrics: (instance) => `${prefix}:metrics:${instance}`,
     metricsPattern: `${prefix}:metrics:*`
   };

@@ -1,5 +1,5 @@
 const MAX_VOTE_COUNT = 1_000_000_000;
-const IDEM_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+export const IDEM_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

@@ -125,3 +125,8 @@ test('naive: every event is sent at once to every subscriber', () => {
   ]);
   assert.deepEqual(a.messages().map((m) => m.upTo), ['1-0', '2-0']);
 });
+
+test('an acta added after verification carries a verification reason', () => {
+  const entries = [{ id: '1-0', event: event({ dep: { 'v:C1': 5 } }, { origin: 'approve', acta: 'E14-1-0003-03', version: 1 }) }];
+  assert.deepEqual(reduceEntries(entries, 'dep').reason, { type: 'verification', acta: 'E14-1-0003-03', version: 1 });
+});

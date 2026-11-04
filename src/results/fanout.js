@@ -28,8 +28,13 @@ export function deltaMessage(topic, upTo, changes, reason) {
   return message;
 }
 
-// A correction that lowers a number travels with its explanation for the UI.
+// Changes that need an explanation travel with it, so the UI never shows a
+// number moving without a reason: a correction that lowers a number, or an
+// acta added after an auditor approved it.
 export function reasonOf(event) {
+  if (event.origin === 'approve') {
+    return { type: 'verification', acta: event.acta, version: event.version };
+  }
   return event.type === 'correction' && event.decreased
     ? { type: 'correction', acta: event.acta, version: event.version }
     : null;

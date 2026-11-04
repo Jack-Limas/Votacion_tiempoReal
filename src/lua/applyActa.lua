@@ -5,6 +5,11 @@
 -- KEYS[3] acc:mesa:{id}  KEYS[4] acc:pto:{id}  KEYS[5] acc:mun:{id}  KEYS[6] acc:dep
 -- KEYS[7] events stream  KEYS[8] catalog (total mesas per topic)
 -- KEYS[9] rank:pto:{id}  KEYS[10] rank:mun:{id}  KEYS[11] rank:dep (candidate ZSETs)
+-- KEYS[12] decision:{case} (fencing)  KEYS[13] idem record of the original
+--          submission (verification decisions only)
+-- ARGV[5] mode: '1' apply, '0' doubtful (queue for verification),
+--         'R' record a verification decision without touching totals
+-- ARGV[11] fencing token and ARGV[12] decision (verification decisions only)
 -- ARGV[1] request digest  ARGV[2] result  ARGV[3] ttl  ARGV[4] votos  ARGV[5] accepted
 -- ARGV[6] acta  ARGV[7] idem  ARGV[8] receivedAt (ms)  ARGV[9] stream MAXLEN
 -- ARGV[10] content digest (votos + sufragantes)
@@ -33,6 +38,29 @@ if existing then
 end
 
 local result = cjson.decode(ARGV[2])
+
+-- Verification decisions (approve / reject / recount) carry the fencing token
+-- of the lease that produced them. Only a token greater than the last one seen
+-- for the case is accepted, so a stale owner can never override a newer
+-- decision, even if its message is delivered late or twice.
+local decision = ARGV[12] or ''
+if ARGV[11] and ARGV[11] ~= '' then
+  local token = tonumber(ARGV[11])
+  local current = tonumber(redis.call('HGET', KEYS[12], 'token') or '0')
+  if token <= current then
+    return cjson.encode({ status = 'stale_token', accepted = false, token = token, currentToken = current })
+  end
+  redis.call('HSET', KEYS[12], 'token', token, 'decision', decision, 'acta', ARGV[6])
+  -- Annotate the jurado's original record so the jury app can show the outcome.
+  local original = redis.call('GET', KEYS[13])
+  if original then
+    local record = cjson.decode(original)
+    record.result.verification = decision
+    redis.call('SET', KEYS[13], cjson.encode(record), 'KEEPTTL')
+  end
+  result.verification = decision
+end
+
 if ARGV[5] == '0' then
   local verificationType = redis.call('TYPE', KEYS[2]).ok
   if verificationType ~= 'none' and verificationType ~= 'stream' then
@@ -135,6 +163,7 @@ if ARGV[5] == '1' then
     -- The XADD runs in the same script that updates the totals: state and
     -- event are atomic. MAXLEN ~ trims whole stream nodes.
     local event = {
+      origin = decision ~= '' and decision or nil,
       acta = acta.acta,
       version = version,
       type = kind,

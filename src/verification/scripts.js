@@ -139,7 +139,7 @@ redis.call('HINCRBY', P .. ':auditor-stats', c.owner .. ':workMs', worked)
 -- The fencing token travels with the decision so a store can reject writes
 -- from a stale owner.
 redis.call('XADD', P .. ':resolutions', 'MAXLEN', '~', 10000, '*',
-  'case', id, 'acta', c.acta, 'decision', ARGV[5], 'note', ARGV[6],
+  'case', id, 'acta', c.acta, 'idem', c.idem or '', 'decision', ARGV[5], 'note', ARGV[6],
   'auditor', c.owner, 'token', c.token)
 emit('case.resolved', load_case(id))
 return reply({ ok = true, workedMs = worked })

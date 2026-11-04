@@ -9,6 +9,7 @@ import {
   redisSubClient
 } from './config/redis.js';
 import { createIdempotencyService } from './services/idempotencyService.js';
+import { createDecisionApplier } from './services/decisionApplier.js';
 import { createResults } from './results/index.js';
 import { createResultsRoutes } from './routes/resultsRoutes.js';
 import { createWebSocketServer } from './sockets/index.js';
@@ -19,7 +20,16 @@ export const verification = createVerificationModule({
   subscriber: redisSubClient
 });
 export const results = createResults({ redis: redisClient });
-export const app = createApp(createIdempotencyService(redisClient), {
+export const idempotencyService = createIdempotencyService(redisClient);
+const decisionClient = redisClient.duplicate();
+decisionClient.on('error', (error) => console.error('Decision applier Redis client error:', error.message));
+export const decisionApplier = createDecisionApplier({
+  client: decisionClient,
+  service: idempotencyService,
+  streamKey: `${verification.config.keyPrefix}:resolutions`,
+  consumer: config.instanceId
+});
+export const app = createApp(idempotencyService, {
   routers: [verification.router, createResultsRoutes(results)],
   actaMiddleware: [verification.actaRateLimiter],
   publicDir: fileURLToPath(new URL('../public/', import.meta.url))
@@ -31,6 +41,7 @@ export async function startServer() {
   await connectRedisClients();
   await verification.start();
   await results.start();
+  decisionApplier.start();
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(config.port, config.host, resolve);
@@ -41,7 +52,8 @@ export async function startServer() {
 export async function stopServer() {
   const stopServices = await Promise.allSettled([
     verification.stop(),
-    results.stop()
+    results.stop(),
+    decisionApplier.stop()
   ]);
 
   for (const socket of webSocketServer.clients) {
