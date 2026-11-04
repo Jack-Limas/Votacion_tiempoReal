@@ -1,7 +1,7 @@
 // Borra los datos del entorno local (FLUSHDB) y vuelve a sembrar el catálogo.
 // Uso: REDIS_URL=redis://localhost:6379 node scripts/reset-datos.js
 import { createClient } from 'redis';
-import { config } from '../src/config.js';
+import { config } from '../src/config/env.js';
 import { sembrarCatalogo } from '../src/publico/catalogo.js';
 import { crearClaves } from '../src/publico/claves.js';
 

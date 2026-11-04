@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { hostname } from 'node:os';
 import { randomBytes } from 'node:crypto';
-import { config as baseConfig } from '../config.js';
+import { config as baseConfig } from '../config/env.js';
 
 function int(name, fallback) {
   const raw = process.env[name];

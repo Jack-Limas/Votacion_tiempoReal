@@ -1,4 +1,4 @@
-import { config as defaultConfig } from '../config.js';
+import { config as defaultConfig } from '../config/env.js';
 import { sembrarCatalogo } from './catalogo.js';
 import { crearClaves } from './claves.js';
 import { createFanout } from './fanout.js';

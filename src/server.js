@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { createApp } from './app.js';
-import { config } from './config.js';
+import { config } from './config/env.js';
 import {
   closeRedisClients,
   connectRedisClients,

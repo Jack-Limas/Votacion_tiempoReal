@@ -1,5 +1,5 @@
 import { WebSocketServer } from 'ws';
-import { config } from '../config.js';
+import { config } from '../config/env.js';
 
 // Several WebSocket endpoints share one HTTP server. Attaching multiple
 // WebSocketServer instances with { server, path } makes each of them answer

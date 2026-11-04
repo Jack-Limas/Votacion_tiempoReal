@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { config } from './config.js';
+import { config } from './config/env.js';
 import { createActaRoutes } from './routes/actaRoutes.js';
 
 export function createApp(idempotencyService, { routers = [], actaMiddleware = [] } = {}) {
