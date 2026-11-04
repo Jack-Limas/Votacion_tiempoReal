@@ -44,9 +44,10 @@ network. Every secret lives in `.env` on the VM, which is never committed.
 | Azure | `Standard_B2s` | amd64 |
 | AWS | `t3.medium` (amd64) or `t4g.medium` (arm64) | both work: every image is multi-arch |
 
-Measured locally, each replica uses about 90 MB of RSS idle and 13.8 KB of heap
-per connection; 8 replicas + nginx + Valkey fit in 4 GB for tens of thousands
-of connections, not for the full 400,000 (see README, known limits).
+Measured locally, each replica uses about 90 MB of RSS idle and the server
+heap per open connection is ≈ 3.4 KB with WebSocket (≈ 6.2 KB with SSE);
+8 replicas + nginx + Valkey fit in 4 GB for tens of thousands of connections.
+The full 400,000 was not measured (see README, known limits).
 
 ---
 
