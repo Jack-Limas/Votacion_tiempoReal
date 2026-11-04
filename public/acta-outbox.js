@@ -66,6 +66,7 @@ export function createActaOutbox({
 } = {}) {
   let flushInProgress;
   let retryTimer;
+  let running = false;
   const handleOnline = () => {
     void flush().catch((error) => report(onError, error));
   };
@@ -149,23 +150,31 @@ export function createActaOutbox({
   }
 
   function start() {
-    if (retryTimer) {
+    if (running) {
       return;
     }
+    running = true;
     globalThis.addEventListener('online', handleOnline);
-    retryTimer = globalThis.setInterval(() => {
-      void flush().catch((error) => report(onError, error));
-    }, retryIntervalMs);
+    // Jittered retry (0.5x-1.5x the interval): thousands of jurados that lost
+    // the network together do not all retry on the same second.
+    const schedule = () => {
+      if (!running) return;
+      retryTimer = globalThis.setTimeout(() => {
+        void flush().catch((error) => report(onError, error)).finally(schedule);
+      }, retryIntervalMs * (0.5 + Math.random()));
+    };
+    schedule();
     void flush().catch((error) => report(onError, error));
   }
 
   function stop() {
+    running = false;
     globalThis.removeEventListener('online', handleOnline);
     if (retryTimer) {
-      globalThis.clearInterval(retryTimer);
+      globalThis.clearTimeout(retryTimer);
       retryTimer = undefined;
     }
   }
 
-  return { enqueueActa, flush, start, stop };
+  return { enqueueActa, flush, start, stop, getPending };
 }
