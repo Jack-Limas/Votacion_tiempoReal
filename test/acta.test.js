@@ -16,7 +16,7 @@ const sampleActa = {
   idem: '8f14e45fceea167a'
 };
 
-test('acepta un acta cuya suma coincide con sufragantes', () => {
+test('accepts an acta whose sum matches sufragantes', () => {
   assert.deepEqual(validateActa(sampleActa), {
     valid: true,
     totalVotos: 627,
@@ -24,7 +24,7 @@ test('acepta un acta cuya suma coincide con sufragantes', () => {
   });
 });
 
-test('marca como dudosa el acta con totales distintos', () => {
+test('flags as doubtful an acta with different totals', () => {
   const result = validateActa({ ...sampleActa, sufragantes: 628 });
   assert.equal(result.valid, false);
   assert.equal(result.doubtful, true);
@@ -32,10 +32,10 @@ test('marca como dudosa el acta con totales distintos', () => {
   assert.equal(result.sufragantes, 628);
 });
 
-test('rechaza votos negativos y una clave idem inválida', () => {
+test('rejects negative votes and an invalid idem key', () => {
   const result = validateActa({
     ...sampleActa,
-    idem: 'clave con espacios',
+    idem: 'key with spaces',
     votos: { C1: -1 }
   });
   assert.equal(result.valid, false);

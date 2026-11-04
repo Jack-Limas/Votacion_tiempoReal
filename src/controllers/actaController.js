@@ -25,12 +25,12 @@ export function createActaController(idempotencyService) {
       return res.status(result.duplicate ? 200 : 201).json(result);
     } catch (error) {
       if (error instanceof RedisUnavailableError) {
-        console.error('No se pudo procesar la recepción del acta:', error.cause);
+        console.error('Could not process the acta:', error.cause);
         return res.status(503).json({
           status: 'temporarily_unavailable',
           accepted: false,
           retryable: true,
-          message: 'No se pudo confirmar el acta. Conserve el envío y reintente automáticamente.'
+          message: 'The acta could not be confirmed. Keep it and retry automatically.'
         });
       }
       return next(error);

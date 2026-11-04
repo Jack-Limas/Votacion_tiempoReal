@@ -22,22 +22,22 @@ export function createApp(idempotencyService, { routers = [], actaMiddleware = [
       return res.status(400).json({
         status: 'rejected',
         accepted: false,
-        message: 'El cuerpo de la solicitud no contiene JSON válido.'
+        message: 'The request body is not valid JSON.'
       });
     }
     if (error.type === 'entity.too.large') {
       return res.status(413).json({
         status: 'rejected',
         accepted: false,
-        message: 'El acta excede el tamaño máximo permitido.'
+        message: 'The acta exceeds the maximum allowed size.'
       });
     }
 
-    console.error('Error inesperado en la API:', error);
+    console.error('Unexpected API error:', error);
     return res.status(500).json({
       status: 'internal_error',
       accepted: false,
-      message: 'Error interno al procesar el acta.'
+      message: 'Internal error while processing the acta.'
     });
   });
 

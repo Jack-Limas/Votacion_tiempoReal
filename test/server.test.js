@@ -12,13 +12,13 @@ import {
   webSocketServer
 } from '../src/server.js';
 
-test('exporta tres clientes Redis independientes', () => {
+test('exports three independent Redis clients', () => {
   assert.notStrictEqual(redisClient, redisSubClient);
   assert.notStrictEqual(redisClient, redisPubClient);
   assert.notStrictEqual(redisSubClient, redisPubClient);
 });
 
-test('el servidor HTTP acepta una conexión WebSocket en /ws', async (t) => {
+test('the HTTP server accepts a WebSocket connection on /ws', async (t) => {
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
