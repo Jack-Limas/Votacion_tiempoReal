@@ -23,19 +23,10 @@ export const app = createApp(createIdempotencyService(redisClient), {
   routers: [verification.router, createPublicoRoutes(publico)],
   actaMiddleware: [verification.actaRateLimiter]
 });
-export default app;
-
-const isVercelRuntime = Boolean(process.env.VERCEL);
-export const server = isVercelRuntime ? null : createServer(app);
-export const webSocketServer = server
-  ? createWebSocketServer(server, { routes: [verification.upgradeRoute] })
-  : null;
+export const server = createServer(app);
+export const webSocketServer = createWebSocketServer(server, { routes: [verification.upgradeRoute] });
 
 export async function startServer() {
-  if (!server) {
-    throw new Error('El servidor HTTP local no está disponible en Vercel.');
-  }
-
   await connectRedisClients();
   await verification.start();
   await publico.start();
@@ -52,20 +43,18 @@ export async function stopServer() {
     publico.stop()
   ]);
 
-  for (const socket of webSocketServer?.clients ?? []) {
+  for (const socket of webSocketServer.clients) {
     socket.terminate();
   }
 
-  const closeHttpServer = server?.listening
+  const closeHttpServer = server.listening
     ? new Promise((resolve, reject) => {
         server.close((error) => error ? reject(error) : resolve());
       })
     : Promise.resolve();
-  const closeWebSocketServer = webSocketServer
-    ? new Promise((resolve, reject) => {
-        webSocketServer.close((error) => error ? reject(error) : resolve());
-      })
-    : Promise.resolve();
+  const closeWebSocketServer = new Promise((resolve, reject) => {
+    webSocketServer.close((error) => error ? reject(error) : resolve());
+  });
 
   const closeResults = await Promise.allSettled([
     closeHttpServer,

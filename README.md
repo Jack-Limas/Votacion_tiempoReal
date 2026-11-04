@@ -70,17 +70,6 @@ para que el cliente conserve el envío y vuelva a intentarlo.
 lista de orígenes separada por comas. No se requieren variables adicionales
 para habilitar CORS o WebSockets.
 
-## Despliegue en Vercel
-
-`vercel.json` enruta las solicitudes HTTP a `src/server.js`, que exporta la
-aplicación Express como handler. Configure `REDIS_URL` en las variables de
-entorno del proyecto de Vercel. Redis se conecta de forma diferida al recibir
-un acta; el endpoint `/health` no requiere esa conexión.
-
-Vercel ejecuta funciones serverless y no mantiene conexiones WebSocket
-persistentes. Por eso el servidor WebSocket solo se crea en el modo local; use
-los endpoints HTTP para recibir actas en este despliegue.
-
 El servicio requiere una instancia Redis. Para conservar confirmaciones frente
 a reinicios, configure Redis con AOF y/o replicación según el nivel de
 durabilidad requerido; el TTL de idempotencia debe cubrir la ventana máxima en
