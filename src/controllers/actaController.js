@@ -1,5 +1,5 @@
 import { RedisUnavailableError } from '../services/idempotencyService.js';
-import { validateActa } from '../validation/acta.js';
+import { IDEM_PATTERN, validateActa } from '../validation/acta.js';
 
 export function createActaController(idempotencyService) {
   return async function receiveActa(req, res, next) {
@@ -16,7 +16,7 @@ export function createActaController(idempotencyService) {
     try {
       const result = await idempotencyService.registerActa(req.body, validation);
 
-      if (result.status === 'idempotency_conflict') {
+      if (result.status === 'idempotency_conflict' || result.status === 'location_conflict') {
         return res.status(409).json(result);
       }
       if (result.status === 'verification_required' && !result.duplicate) {
@@ -25,13 +25,31 @@ export function createActaController(idempotencyService) {
       return res.status(result.duplicate ? 200 : 201).json(result);
     } catch (error) {
       if (error instanceof RedisUnavailableError) {
-        console.error('No se pudo procesar la recepción del acta:', error.cause);
+        console.error('Could not process the acta:', error.cause);
         return res.status(503).json({
           status: 'temporarily_unavailable',
           accepted: false,
           retryable: true,
-          message: 'No se pudo confirmar el acta. Conserve el envío y reintente automáticamente.'
+          message: 'The acta could not be confirmed. Keep it and retry automatically.'
         });
+      }
+      return next(error);
+    }
+  };
+}
+
+export function createSubmissionStatusController(idempotencyService) {
+  return async function submissionStatus(req, res, next) {
+    if (!IDEM_PATTERN.test(req.params.idem)) {
+      return res.status(422).json({ status: 'rejected', message: 'Invalid idem key.' });
+    }
+    try {
+      const result = await idempotencyService.getSubmission(req.params.idem);
+      if (!result) return res.status(404).json({ status: 'unknown', message: 'No submission with that idem key.' });
+      return res.status(200).json(result);
+    } catch (error) {
+      if (error instanceof RedisUnavailableError) {
+        return res.status(503).json({ status: 'temporarily_unavailable', retryable: true });
       }
       return next(error);
     }

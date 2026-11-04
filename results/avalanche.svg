@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 360" font-family="system-ui, sans-serif" font-size="12">
+<rect width="760" height="360" fill="#fff"/>
+<text x="60" y="22" font-size="14" font-weight="600">Reconnection attempts per second after killing one instance</text>
+<line x1="60" x2="740" y1="320" y2="320" stroke="#e5e7eb"/><text x="52" y="324" text-anchor="end" fill="#6b7280">0</text>
+<line x1="60" x2="740" y1="250" y2="250" stroke="#e5e7eb"/><text x="52" y="254" text-anchor="end" fill="#6b7280">144</text>
+<line x1="60" x2="740" y1="180" y2="180" stroke="#e5e7eb"/><text x="52" y="184" text-anchor="end" fill="#6b7280">288</text>
+<line x1="60" x2="740" y1="110" y2="110" stroke="#e5e7eb"/><text x="52" y="114" text-anchor="end" fill="#6b7280">432</text>
+<line x1="60" x2="740" y1="40" y2="40" stroke="#e5e7eb"/><text x="52" y="44" text-anchor="end" fill="#6b7280">576</text>
+<text x="60" y="336" text-anchor="middle" fill="#6b7280">0s</text>
+<text x="112.30769230769232" y="336" text-anchor="middle" fill="#6b7280">1s</text>
+<text x="164.61538461538464" y="336" text-anchor="middle" fill="#6b7280">2s</text>
+<text x="216.92307692307693" y="336" text-anchor="middle" fill="#6b7280">3s</text>
+<text x="269.2307692307693" y="336" text-anchor="middle" fill="#6b7280">4s</text>
+<text x="321.53846153846155" y="336" text-anchor="middle" fill="#6b7280">5s</text>
+<text x="373.84615384615387" y="336" text-anchor="middle" fill="#6b7280">6s</text>
+<text x="426.15384615384613" y="336" text-anchor="middle" fill="#6b7280">7s</text>
+<text x="478.4615384615385" y="336" text-anchor="middle" fill="#6b7280">8s</text>
+<text x="530.7692307692307" y="336" text-anchor="middle" fill="#6b7280">9s</text>
+<text x="583.0769230769231" y="336" text-anchor="middle" fill="#6b7280">10s</text>
+<text x="635.3846153846154" y="336" text-anchor="middle" fill="#6b7280">11s</text>
+<text x="687.6923076923077" y="336" text-anchor="middle" fill="#6b7280">12s</text>
+<text x="740" y="336" text-anchor="middle" fill="#6b7280">13s</text>
+<polyline fill="none" stroke="#991b1b" stroke-width="2" points="60.0,71.1 112.3,82.8 164.6,320.0 216.9,320.0"/>
+<rect x="70" y="46" width="12" height="3" fill="#991b1b"/><text x="88" y="51">no jitter: immediate retry (peak 512/s)</text>
+<polyline fill="none" stroke="#f97316" stroke-width="2" points="60.0,320.0 112.3,113.9 164.6,40.0 216.9,320.0 269.2,296.7 321.5,318.5"/>
+<rect x="70" y="64" width="12" height="3" fill="#f97316"/><text x="88" y="69">no jitter: fixed 1 s retry (peak 576/s)</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2" points="60.0,320.0 112.3,317.6 164.6,270.4 216.9,183.4 269.2,181.9 321.5,203.8 373.8,275.8 426.2,318.5 478.5,320.0 530.8,319.0 583.1,320.0 635.4,319.5 687.7,318.5 740.0,318.5"/>
+<rect x="70" y="82" width="12" height="3" fill="#2563eb"/><text x="88" y="87">exponential backoff + full jitter (4 s base) (peak 284/s)</text>
+<text x="410" y="354" text-anchor="middle" fill="#6b7280">seconds since the instance was killed</text></svg>

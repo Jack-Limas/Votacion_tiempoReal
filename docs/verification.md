@@ -55,7 +55,7 @@ allows the Lua scripts to build per-case key names.
 | `P:version` | String | State version, `INCR` on every queue/lease change | Permanent, monotonic |
 | `P:events` | Pub/Sub channel | `{type, version, case}` for every change | No memory (see §6) |
 | `P:stats` / `P:auditor-stats` | Hash | Counters: ingested, resolved, expired, per-auditor resolved and work time | Permanent |
-| `P:resolutions` | Stream | Decisions with the fencing token, for the results module | `MAXLEN ~ 10000` |
+| `P:resolutions` | Stream | Decisions with the fencing token and the original `idem`; consumed by the results module (group `results-apply`) | `MAXLEN ~ 10000` |
 | `P:conn:<connId>` | Hash | Presence: auditorId, name, role, instance, connectedAt, lastSeen, lastActivity | `PEXPIRE` presence TTL (30 s) |
 | `P:presence` | ZSET | connId → presence expiry, index used to list without `SCAN`/`KEYS` | Pruned on read and by the sweeper |
 | `P:rl:<scope>:<credential>:<window>` | String | Rate-limit counter | `PEXPIRE` = window |
@@ -136,6 +136,14 @@ re-checking inside the script. Running it concurrently on eight instances is
 safe: the first script requeues, the others find nothing (tested). It also
 prunes dead presence entries.
 
+### What a decision does to the results
+`approve` adds the acta to the totals exactly once, `reject` and `recount`
+only record the decision (the mesa stays unreported until a new version
+arrives). The results module applies each entry of `P:resolutions` with the
+acta apply script, idempotent per (case, token) and refusing tokens older than
+the last one seen for the case. The jurado sees the outcome at
+`GET /api/actas/:idem`. Details in `docs/results-design.md` §3.
+
 ## 5. RF-8: presence
 
 * One hash per connection (`P:conn:<connId>`) with `PEXPIRE` 30 s, refreshed by
@@ -173,6 +181,7 @@ Fixed-window counter per credential in Redis (`RATE_LIMIT` script: `INCR` +
 | `http` (`/api/verification/*`) | token subject, else login id, else IP | 20 / 10 s | `429` + `Retry-After` + JSON `rate_limited` |
 | `ws` (console messages) | token subject (shared across tabs/instances) | 40 / 10 s | `{type:'error', code:'rate_limited', retryAfterMs}` |
 | `actas` (`POST /api/actas`) | `jurado` field, else IP | 30 / 10 s | `429`; the jurado outbox already treats 429 as retryable |
+| `public-connect` (new `/ws` and `/stream` connections) | client IP (from `X-Forwarded-For` behind `TRUST_PROXY` hops) | 60 / 10 s (`RATE_LIMIT_PUBLIC_CONNECTS`, 0 disables) | SSE `429` + `Retry-After`; WebSocket close `4429` |
 
 If Redis is down the HTTP limiter fails open (the endpoints answer 503
 anyway) and the WebSocket limiter falls back to a per-connection local window.
@@ -204,9 +213,8 @@ anyway) and the WebSocket limiter falls back to a per-connection local window.
 
 ```bash
 docker compose up -d          # Redis 7 for development
-cp .env.example .env          # set secret and access codes
-npm start
-# open http://localhost:3000/verification/
+docker compose up -d --build  # 8 replicas + nginx + Valkey; dev access codes: dev-auditor / dev-coordinator
+# open http://localhost:8080/verification/
 npm test                      # Redis tests are skipped (with a message) if Redis is not reachable
 ```
 

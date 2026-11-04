@@ -1,24 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createIdempotencyService } from '../src/services/idempotencyService.js';
+import { createIdempotencyService, RedisUnavailableError } from '../src/services/idempotencyService.js';
 
-test('conecta Redis de forma diferida al registrar un acta', async () => {
+const acta = { acta: 'E14-001', mesa: 1, puesto: 1, municipio: 1, version: 1, idem: 'idem-001', votos: { C1: 1 } };
+
+test('uses the already connected client and never connects lazily', async () => {
+  let evaluated = 0;
   const redis = {
-    isOpen: false,
+    isOpen: true,
     async connect() {
-      this.isOpen = true;
+      assert.fail('the service must not open connections on its own');
     },
     async eval() {
+      evaluated += 1;
       return JSON.stringify({ status: 'accepted', accepted: true });
     }
   };
-  const service = createIdempotencyService(redis);
-
-  const result = await service.registerActa(
-    { acta: 'E14-001', idem: 'idem-001', votos: {} },
-    { valid: true }
-  );
-
-  assert.equal(redis.isOpen, true);
+  const result = await createIdempotencyService(redis).registerActa(acta, { valid: true });
+  assert.equal(evaluated, 1);
   assert.deepEqual(result, { status: 'accepted', accepted: true });
+});
+
+test('wraps Redis failures so the controller can answer 503', async () => {
+  const redis = {
+    isOpen: false,
+    async eval() {
+      throw new Error('The client is closed');
+    }
+  };
+  await assert.rejects(
+    createIdempotencyService(redis).registerActa(acta, { valid: true }),
+    RedisUnavailableError
+  );
 });

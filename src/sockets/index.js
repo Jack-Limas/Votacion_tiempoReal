@@ -1,5 +1,5 @@
 import { WebSocketServer } from 'ws';
-import { config } from '../config.js';
+import { config } from '../config/env.js';
 
 // Several WebSocket endpoints share one HTTP server. Attaching multiple
 // WebSocketServer instances with { server, path } makes each of them answer
@@ -40,12 +40,12 @@ export function createWebSocketServer(httpServer, { routes = [] } = {}) {
 
   webSocketServer.on('connection', (socket) => {
     socket.on('error', (error) => {
-      console.error('Error en una conexión WebSocket:', error);
+      console.error('WebSocket connection error:', error);
     });
   });
 
   webSocketServer.on('error', (error) => {
-    console.error('Error del servidor WebSocket:', error);
+    console.error('WebSocket server error:', error);
   });
 
   return webSocketServer;

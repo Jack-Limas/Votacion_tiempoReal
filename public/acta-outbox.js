@@ -9,7 +9,7 @@ function createIdem() {
     const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
     return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
   }
-  throw new Error('Este navegador no ofrece generación segura de claves idem.');
+  throw new Error('This browser cannot generate secure idem keys.');
 }
 
 function openDatabase(databaseName) {
@@ -22,8 +22,8 @@ function openDatabase(databaseName) {
       }
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('No se pudo abrir la cola local.'));
-    request.onblocked = () => reject(new Error('La base local está bloqueada por otra pestaña.'));
+    request.onerror = () => reject(request.error ?? new Error('Could not open the local queue.'));
+    request.onblocked = () => reject(new Error('The local database is blocked by another tab.'));
   });
 }
 
@@ -41,8 +41,8 @@ async function withStore(databaseName, mode, action) {
         return;
       }
       transaction.oncomplete = () => resolve(result);
-      transaction.onerror = () => reject(transaction.error ?? new Error('Falló la operación de la cola local.'));
-      transaction.onabort = () => reject(transaction.error ?? new Error('Se canceló la operación de la cola local.'));
+      transaction.onerror = () => reject(transaction.error ?? new Error('The local queue operation failed.'));
+      transaction.onabort = () => reject(transaction.error ?? new Error('The local queue operation was aborted.'));
     });
   } finally {
     database.close();
@@ -53,7 +53,7 @@ function report(callback, ...args) {
   try {
     callback(...args);
   } catch (error) {
-    console.error('Error en el callback de la cola de actas:', error);
+    console.error('Acta outbox callback failed:', error);
   }
 }
 
@@ -66,6 +66,7 @@ export function createActaOutbox({
 } = {}) {
   let flushInProgress;
   let retryTimer;
+  let running = false;
   const handleOnline = () => {
     void flush().catch((error) => report(onError, error));
   };
@@ -75,7 +76,7 @@ export function createActaOutbox({
       const request = store.getAll();
       return new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result.sort((a, b) => a.createdAt - b.createdAt));
-        request.onerror = () => reject(request.error ?? new Error('No se pudo leer la cola local.'));
+        request.onerror = () => reject(request.error ?? new Error('Could not read the local queue.'));
       });
     });
   }
@@ -86,11 +87,11 @@ export function createActaOutbox({
 
   async function enqueueActa(acta) {
     if (!acta || typeof acta !== 'object' || Array.isArray(acta)) {
-      throw new TypeError('El acta debe ser un objeto.');
+      throw new TypeError('The acta must be an object.');
     }
     const payload = { ...acta, idem: acta.idem || createIdem() };
     if (typeof payload.idem !== 'string' || payload.idem.trim() === '') {
-      throw new TypeError('El acta debe tener una clave idem no vacía.');
+      throw new TypeError('The acta must have a non-empty idem key.');
     }
     await withStore(databaseName, 'readwrite', (store) => store.put({
       idem: payload.idem,
@@ -110,14 +111,14 @@ export function createActaOutbox({
     });
 
     if (response.status === 429 || response.status >= 500) {
-      throw new Error(`El servidor solicitó reintentar (HTTP ${response.status}).`);
+      throw new Error(`The server asked to retry (HTTP ${response.status}).`);
     }
 
     let result;
     try {
       result = await response.json();
     } catch (error) {
-      throw new Error('El servidor no devolvió una confirmación JSON válida.', { cause: error });
+      throw new Error('The server did not return a valid JSON confirmation.', { cause: error });
     }
 
     await removePending(record.idem);
@@ -149,23 +150,31 @@ export function createActaOutbox({
   }
 
   function start() {
-    if (retryTimer) {
+    if (running) {
       return;
     }
+    running = true;
     globalThis.addEventListener('online', handleOnline);
-    retryTimer = globalThis.setInterval(() => {
-      void flush().catch((error) => report(onError, error));
-    }, retryIntervalMs);
+    // Jittered retry (0.5x-1.5x the interval): thousands of jurados that lost
+    // the network together do not all retry on the same second.
+    const schedule = () => {
+      if (!running) return;
+      retryTimer = globalThis.setTimeout(() => {
+        void flush().catch((error) => report(onError, error)).finally(schedule);
+      }, retryIntervalMs * (0.5 + Math.random()));
+    };
+    schedule();
     void flush().catch((error) => report(onError, error));
   }
 
   function stop() {
+    running = false;
     globalThis.removeEventListener('online', handleOnline);
     if (retryTimer) {
-      globalThis.clearInterval(retryTimer);
+      globalThis.clearTimeout(retryTimer);
       retryTimer = undefined;
     }
   }
 
-  return { enqueueActa, flush, start, stop };
+  return { enqueueActa, flush, start, stop, getPending };
 }

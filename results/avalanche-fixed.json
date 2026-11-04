@@ -1,0 +1,30 @@
+{
+  "strategy": "fixed",
+  "fixedDelayMs": 1000,
+  "clients": 8000,
+  "killedInstance": "f4d8a1148ff7",
+  "affectedClients": 1000,
+  "reconnected": 1000,
+  "reconnectedOnInstances": {
+    "5d6568d38fad": 143,
+    "71f335dfd7fe": 142,
+    "66c2cdc2fa97": 143,
+    "22233c043ce4": 143,
+    "8c0f10ba9e67": 143,
+    "6fc8e5cd0710": 143,
+    "975469fe4a19": 143
+  },
+  "landedOnKilledInstance": 0,
+  "secondsToReconnectAll": 5.4,
+  "peakAttemptsPer100ms": 259,
+  "peakAttemptsPerSecond": 576,
+  "failedAttempts": 51,
+  "droppedBeforeKill": 0,
+  "neverDetected": 0,
+  "detectionMs": {
+    "first": 500,
+    "median": 985,
+    "last": 1079
+  },
+  "baseMs": null
+}

@@ -1,5 +1,5 @@
 import { createClient } from 'redis';
-import { config } from '../config.js';
+import { config } from './env.js';
 
 function createRedisClient(name, options) {
   const client = createClient({
@@ -12,7 +12,7 @@ function createRedisClient(name, options) {
     }
   });
   client.on('error', (error) => {
-    console.error(`Error del cliente Redis ${name}:`, error);
+    console.error(`Redis client ${name} error:`, error);
   });
   return client;
 }
@@ -39,10 +39,10 @@ export async function connectRedisClients() {
     } catch (closeError) {
       throw new AggregateError(
         [error, closeError],
-        'Falló la conexión Redis y también su limpieza.'
+        'The Redis connection failed and so did its cleanup.'
       );
     }
-    throw new Error('No fue posible conectar todos los clientes Redis.', { cause: error });
+    throw new Error('Could not connect every Redis client.', { cause: error });
   }
 }
 
@@ -57,6 +57,6 @@ export async function closeRedisClients() {
     .map((result) => result.reason);
 
   if (errors.length > 0) {
-    throw new AggregateError(errors, 'Uno o más clientes Redis no pudieron cerrarse.');
+    throw new AggregateError(errors, 'One or more Redis clients could not be closed.');
   }
 }

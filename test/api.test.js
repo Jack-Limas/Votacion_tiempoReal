@@ -23,7 +23,7 @@ async function listen(server) {
   return `http://127.0.0.1:${address.port}`;
 }
 
-test('POST /api/actas confirma un acta y comunica cuando requiere verificación', async (t) => {
+test('POST /api/actas confirms an acta and reports when it needs verification', async (t) => {
   const idempotencyService = {
     async registerActa(acta, validation) {
       if (validation.doubtful) {
@@ -63,10 +63,10 @@ test('POST /api/actas confirma un acta y comunica cuando requiere verificación'
   assert.equal((await doubtfulResponse.json()).status, 'verification_required');
 });
 
-test('POST /api/actas rechaza campos incompletos sin llamar a Redis', async (t) => {
+test('POST /api/actas rejects incomplete fields without calling Redis', async (t) => {
   const server = createServer(createApp({
     async registerActa() {
-      assert.fail('No debe registrar un payload inválido.');
+      assert.fail('An invalid payload must not be registered.');
     }
   }));
   const baseUrl = await listen(server);

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Jury Transmission</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    form .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .votes { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .sum { display: flex; justify-content: space-between; margin: 6px 0 14px; font-weight: 600; }
+    .sum.bad { color: #fecaca; }
+    #queue li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+    #queue { list-style: none; margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">E14</div><div>Jury transmission<small>Actas are stored on this device until confirmed</small></div></div>
+    <span class="pill" id="net"><span class="dot"></span>…</span>
+  </header>
+  <div id="banner" class="banner hidden" role="status" aria-live="polite"></div>
+  <main class="grid two">
+    <section class="card" aria-labelledby="form-title">
+      <div class="card-head"><h2 id="form-title">New acta</h2></div>
+      <form class="card-body" id="form" autocomplete="off">
+        <div class="row">
+          <label class="field"><span>Mesa id</span><input name="mesa" type="number" min="1" required value="4201"></label>
+          <label class="field"><span>Puesto</span><input name="puesto" type="number" min="1" required value="176"></label>
+          <label class="field"><span>Municipio</span><input name="municipio" type="number" min="1" required value="11"></label>
+          <label class="field"><span>Version</span><input name="version" type="number" min="1" required value="1"></label>
+        </div>
+        <div class="row">
+          <label class="field"><span>Acta code</span><input name="acta" required value="E14-176-0042-03"></label>
+          <label class="field"><span>Jurado</span><input name="jurado" required value="JUR-88134"></label>
+          <label class="field"><span>Photo of the acta</span><input name="photo" type="file" accept="image/*" capture="environment"></label>
+        </div>
+        <div class="votes" id="votes"></div>
+        <label class="field"><span>Sufragantes (voters)</span><input name="sufragantes" type="number" min="0" required value="627"></label>
+        <div class="sum" id="sum"></div>
+        <button class="btn primary" type="submit">Store and transmit</button>
+      </form>
+    </section>
+    <section class="card" aria-labelledby="queue-title">
+      <div class="card-head"><h2 id="queue-title">Transmissions</h2></div>
+      <ul id="queue"><li class="muted">Nothing sent from this device yet.</li></ul>
+    </section>
+  </main>
+  <script type="module" src="/jury/jury.js"></script>
+</body>
+</html>

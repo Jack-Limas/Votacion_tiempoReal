@@ -1,8 +1,5 @@
-import express, { Router } from 'express';
-import { fileURLToPath } from 'node:url';
+import { Router } from 'express';
 import { checkAccessCode, issueToken, isValidSubject, verifyToken } from './auth.js';
-
-const PUBLIC_DIR = fileURLToPath(new URL('../../public/verification/', import.meta.url));
 
 // Fixed-window limiter keyed by credential (token subject when present,
 // otherwise the body/route-provided id, otherwise the client IP). Fails open
@@ -43,8 +40,6 @@ function bearerSubject(secret) {
 
 export function createVerificationRoutes({ config, store, health, gateway }) {
   const router = Router();
-
-  router.use('/verification', express.static(PUBLIC_DIR, { index: 'index.html', maxAge: '5m' }));
 
   const api = Router();
   api.use(createHttpRateLimiter(store, {
