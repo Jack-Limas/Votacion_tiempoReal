@@ -133,7 +133,24 @@ cómo levantarlo. Para empezar con los datos en limpio:
 
 - `GET /stream?sub=mun:11,pto:176,dep`: SSE. Tópicos `dep`, `mun:{id}` y `pto:{id}`.
 - `GET /whoami`: identificador de la instancia (`INSTANCE_ID` o el hostname).
-- `GET /metrics`: métricas de la instancia (conexiones y suscriptores por tópico).
+- `GET /metrics`: métricas de la instancia (Event Loop, conexiones, suscriptores, mensajes, retraso de publicación).
+- `GET /metrics/all`: métricas de todas las instancias, leídas de Redis.
+
+### Prueba de carga (RF-4)
+
+Corre dentro de la red de compose. Usa `--no-deps` para que compose no recree
+las réplicas con otra configuración:
+
+```bash
+FANOUT_MODE=naive docker compose up -d --force-recreate app && docker compose restart nginx
+docker compose run --rm --no-deps carga --conexiones=10000 --procesos=4 --velocidad=30 --desde=0 --hasta=40
+docker compose up -d --force-recreate app && docker compose restart nginx      # batched
+docker compose run --rm --no-deps carga --conexiones=10000 --procesos=4 --velocidad=30 --desde=0 --hasta=40
+npm run estimar -- --flush=1000 --mezcla=dep:0.5,mun:0.35,pto:0.15             # jornada completa
+```
+
+Cada corrida reinicia los datos y deja `resultados/carga-<modo>-<conexiones>.csv`
+(por segundo e instancia) y un `.json` con el resumen.
 
 ### Variables de entorno
 
@@ -146,3 +163,9 @@ cómo levantarlo. Para empezar con los datos en limpio:
 | `STREAM_BLOCK_MS` | 5000 | `BLOCK` del `XREAD` |
 | `STREAM_READ_COUNT` | 200 | `COUNT` del `XREAD` |
 | `MAX_TOPICS` | 10 | Tópicos por conexión |
+| `FANOUT_MODE` | batched | `batched` o `naive` (comparación) |
+| `FLUSH_MS` | 1000 | Ventana de agregación |
+| `BATCH_SIZE` | 100 | Envíos por lote antes de ceder el Event Loop |
+| `HEARTBEAT_MS` | 15000 | Comentario SSE para mantener viva la conexión |
+| `EL_RESOLUTION_MS` | 10 | Resolución de `monitorEventLoopDelay` |
+| `METRICS_TTL_S` | 5 | TTL de las métricas publicadas en Redis |

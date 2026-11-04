@@ -29,6 +29,9 @@ services:
       PORT: 3000
       REDIS_URL: redis://valkey:6379
       MAXLEN: ${MAXLEN:-10000}
+      FANOUT_MODE: ${FANOUT_MODE:-batched}
+      FLUSH_MS: ${FLUSH_MS:-1000}
+      BATCH_SIZE: ${BATCH_SIZE:-100}
     ulimits:
       nofile: { soft: 200000, hard: 200000 }
     depends_on:
@@ -45,6 +48,22 @@ services:
       nofile: { soft: 200000, hard: 200000 }
     depends_on:
       - app
+
+  # Generador de carga dentro de la red de compose (no pasa por el reenvío de
+  # puertos del host). Uso: docker compose run --rm carga --conexiones=10000
+  carga:
+    image: votacion-tiempo-real:local
+    profiles: ["carga"]
+    entrypoint: ["node", "scripts/carga.js"]
+    environment:
+      BASE_URL: http://nginx
+      REDIS_URL: redis://valkey:6379
+    volumes:
+      - ./resultados:/app/resultados
+    ulimits:
+      nofile: { soft: 200000, hard: 200000 }
+    depends_on:
+      - nginx
 
 volumes:
   valkey-data:

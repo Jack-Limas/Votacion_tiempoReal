@@ -9,6 +9,14 @@ function positiveInteger(value, fallback, name) {
   return parsed;
 }
 
+function oneOf(value, allowed, fallback, name) {
+  const selected = value || fallback;
+  if (!allowed.includes(selected)) {
+    throw new Error(`${name} debe ser uno de: ${allowed.join(', ')}.`);
+  }
+  return selected;
+}
+
 export const config = {
   port: positiveInteger(process.env.PORT, 3000, 'PORT'),
   host: process.env.HOST ?? '0.0.0.0',
@@ -29,5 +37,12 @@ export const config = {
   streamMaxLen: positiveInteger(process.env.MAXLEN, 10000, 'MAXLEN'),
   streamBlockMs: positiveInteger(process.env.STREAM_BLOCK_MS, 5000, 'STREAM_BLOCK_MS'),
   streamReadCount: positiveInteger(process.env.STREAM_READ_COUNT, 200, 'STREAM_READ_COUNT'),
-  maxTopicsPorConexion: positiveInteger(process.env.MAX_TOPICS, 10, 'MAX_TOPICS')
+  maxTopicsPorConexion: positiveInteger(process.env.MAX_TOPICS, 10, 'MAX_TOPICS'),
+  // RF-4: agregación por ventana y envío por lotes.
+  fanoutMode: oneOf(process.env.FANOUT_MODE, ['batched', 'naive'], 'batched', 'FANOUT_MODE'),
+  flushMs: positiveInteger(process.env.FLUSH_MS, 1000, 'FLUSH_MS'),
+  batchSize: positiveInteger(process.env.BATCH_SIZE, 100, 'BATCH_SIZE'),
+  heartbeatMs: positiveInteger(process.env.HEARTBEAT_MS, 15000, 'HEARTBEAT_MS'),
+  eventLoopResolutionMs: positiveInteger(process.env.EL_RESOLUTION_MS, 10, 'EL_RESOLUTION_MS'),
+  metricsTtlSeconds: positiveInteger(process.env.METRICS_TTL_S, 5, 'METRICS_TTL_S')
 };

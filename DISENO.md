@@ -113,3 +113,111 @@ Verificación (prueba `test/integration/rf5-topicos.test.js`, contra las 8
 réplicas): un cliente en `mun:11` recibe solo mensajes de `mun:11` y uno en
 `pto:176` solo de `pto:176`; al desconectarse, ambos desaparecen del mapa; 16
 peticiones a `/whoami` respondieron 8 instancias distintas.
+
+## 5. RF-4: agregación por ventana y envío por lotes
+
+`src/publico/fanout.js`, modo `FANOUT_MODE=batched` (por defecto):
+
+1. Los eventos del stream **no se envían al llegar**. Se acumulan en un mapa de
+   tópicos sucios: por tópico, el último valor absoluto de cada campo que
+   cambió, el `motivo` (si una corrección bajó un número) y `upTo`, el último
+   ID del stream procesado. Un tópico sin suscriptores locales se ignora.
+2. Cada `FLUSH_MS` (1000 ms) se arma **un mensaje por tópico sucio**, solo con
+   los campos que cambiaron, y se **serializa una vez**: todos los suscriptores
+   reciben el mismo string.
+3. Se envía en lotes de `BATCH_SIZE` y entre lotes se cede el Event Loop con
+   `await new Promise(r => setImmediate(r))`.
+4. Los flushes no se solapan: si toca uno mientras el anterior sigue enviando,
+   la ventana nueva sigue acumulando y se envía, fusionada, al terminar.
+5. Cada conexión descarta los deltas con `upTo <= cursor` de ese tópico. Los
+   IDs se comparan como números (ms y secuencia): como texto, `9-0 > 10-0`.
+6. Una corrección que baja un número viaja con
+   `motivo: {tipo:"correccion", acta, version}` para que la UI lo explique.
+
+`FANOUT_MODE=naive` envía cada evento a cada suscriptor en un bucle síncrono.
+Solo existe para la comparación.
+
+### Por qué setImmediate
+
+`process.nextTick` y las promesas resueltas son **microtareas**: se ejecutan
+todas antes de que el Event Loop vuelva a la fase de I/O, así que un bucle que
+"cede" con ellas sigue bloqueando sockets, timers y las peticiones de los
+jurados. `setImmediate` programa la continuación en la fase *check*, después del
+*poll* de I/O. Entre dos lotes alcanzan a correr las peticiones pendientes. La
+prueba unitaria `cede el Event Loop entre lotes` lo verifica: un callback
+programado con `setImmediate` corre justo después del primer lote.
+
+### BATCH_SIZE = 100
+
+Con 500 por lote, cada lote tardó ~40 ms en este equipo (las 8 réplicas, nginx
+y el generador compiten por la misma VM de Docker). Con 100, el p99 por segundo
+quedó por debajo de 20 ms. Ceder más seguido cuesta poco: un `setImmediate` por
+cada 100 envíos.
+
+### Medición (prueba de carga, `scripts/carga.js`)
+
+10.000 conexiones SSE a través de nginx; simulador de los primeros 40 minutos
+de la jornada comprimidos x30 (3.817 envíos: 3.305 actas que generan evento,
+57 de ellas correcciones; además 240 reenvíos y 272 dudosas). Mezcla de
+suscripciones: 50% `dep`, 35% municipio, 15% puesto. CSV por segundo e
+instancia en `resultados/`.
+
+| | naive | batched (BATCH_SIZE=100) |
+|---|---|---|
+| Conexiones | 10.000 (1.250 por instancia) | 10.000 (≈3.330 en 3 instancias*) |
+| Retraso del Event Loop, p99 desde el arranque | 483–685 ms | 1,2–6,8 ms |
+| Retraso del Event Loop, máx | 0,9–1,9 s | 26–88 ms |
+| p99 por segundo (mediana / p99 / máx de los segundos) | 293 / 1.229 / 1.229 ms | 0,96 / 11,7 / 18 ms |
+| Envíos de jurados fallidos durante la prueba | 22 | 0 |
+| Mensajes emitidos | 19.335.972 | 591.846 |
+| Cifra ingenua de la prueba (actas × conexiones) | 32.850.000 | 33.050.000 |
+| Retraso recepción → publicación p50 / p99 | 327–589 / 1.008–1.798 ms | 486–641 / 990–1.170 ms |
+
+\* Tras recrear las réplicas, nginx tenía la lista de IPs desactualizada y
+concentró las conexiones en 3 instancias, que soportaron 2,7 veces más carga
+que en naive y aun así quedaron por debajo de 20 ms de p99. Antes de una
+corrida conviene `docker compose restart nginx`.
+
+En naive el p99 por segundo sale de solo 12 muestras: las mismas instancias
+bloqueadas tardaban en responder `/metrics`. El retraso de publicación de
+batched (~0,5 s de mediana) es el costo esperado de una ventana de 1 s.
+
+### Mensajes emitidos frente a los 2.560 millones
+
+- **Prueba de carga:** 591.846 mensajes frente a 33.050.000 ingenuos (56 veces
+  menos). La compresión x30 del tiempo infla esta reducción, porque una ventana
+  de 1 s junta 30 veces más actas que en tiempo real.
+- **Jornada completa en tiempo real** (`npm run estimar`): plan del simulador,
+  400.000 clientes conectados las 2 h, suscriptores repartidos según las mesas.
+  La cifra ingenua del caso es 6.400 × 400.000 = **2.560.000.000**.
+
+| Mezcla de suscripciones | FLUSH_MS | Por evento con tópicos | Agregado por ventana | Frente a 2.560 M |
+|---|---|---|---|---|
+| 50% dep, 35% mun, 15% pto | 1000 | 1.379 M | 879 M | 34% (3x menos) |
+| 50% dep, 35% mun, 15% pto | 2000 | 1.379 M | 652 M | 25% (4x) |
+| 10% dep, 60% mun, 30% pto | 1000 | 528 M | 368 M | 14% (7x) |
+| 10% dep, 60% mun, 30% pto | 2000 | 528 M | 287 M | 11% (9x) |
+| 0% dep, 70% mun, 30% pto | 1000 | 333 M | 253 M | 10% (10x) |
+
+La mayor parte de la reducción la aporta el tópico (RF-5). La ventana agrega
+poco para `dep` y para la capital (`mun:1`, un tercio de las mesas), porque en
+el pico cambian casi cada segundo y sus suscriptores reciben ~1 mensaje por
+segundo. Para bajar más hay que alargar la ventana de esos tópicos (el caso
+dice que el usuario no distingue una actualización por acta de una cada 2 s).
+
+### Métricas
+
+`GET /metrics` (instancia) y `GET /metrics/all` (todas, leídas de Redis: cada
+instancia publica `metrics:{instancia}` cada segundo con TTL de 5 s):
+
+- Retraso del Event Loop (`monitorEventLoopDelay`, resolución 10 ms): p50, p99
+  y máx del último segundo y desde el arranque. Se resta la resolución porque
+  el histograma registra el intervalo completo entre disparos. `reset()`
+  descarta la primera muestra siguiente, así que el reinicio por segundo está
+  desfasado medio `FLUSH_MS` del flush y hay un segundo histograma que nunca se
+  reinicia.
+- Conexiones por instancia y suscriptores por tópico.
+- Mensajes emitidos por segundo y total, frente a la cifra ingenua (cada evento
+  × conexiones de la instancia).
+- Retraso entre la recepción del acta (`ts_recepcion`) y su envío: p50 y p99.
+- Reconexiones resueltas por replay y por snapshot (RF-6).

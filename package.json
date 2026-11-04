@@ -9,7 +9,9 @@
     "test": "node --test",
     "test:unit": "node --test test/*.test.js test/unit/*.test.js",
     "test:integration": "node --test test/integration/*.test.js",
-    "simular": "node scripts/simular-actas.js"
+    "simular": "node scripts/simular-actas.js",
+    "carga": "node scripts/carga.js",
+    "estimar": "node scripts/estimar-mensajes.js"
   },
   "engines": {
     "node": ">=20"

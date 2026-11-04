@@ -2,6 +2,7 @@ import { config as defaultConfig } from '../config.js';
 import { sembrarCatalogo } from './catalogo.js';
 import { crearClaves } from './claves.js';
 import { createFanout } from './fanout.js';
+import { createMetrics, leerMetricasCluster } from './metrics.js';
 import { openSseConnection } from './sse.js';
 import { createStreamReader } from './stream.js';
 import { createTopicRegistry, parseSubscriptions } from './topics.js';
@@ -10,7 +11,25 @@ import { createTopicRegistry, parseSubscriptions } from './topics.js';
 export function createPublico({ redis, config = defaultConfig, logger = console }) {
   const claves = crearClaves(config.redisKeyPrefix);
   const registry = createTopicRegistry();
-  const fanout = createFanout({ registry });
+  const metrics = createMetrics({
+    instanceId: config.instanceId,
+    mode: config.fanoutMode,
+    registry,
+    redis,
+    claves,
+    resolutionMs: config.eventLoopResolutionMs,
+    ttlSeconds: config.metricsTtlSeconds,
+    logger
+  });
+  const fanout = createFanout({
+    registry,
+    mode: config.fanoutMode,
+    flushMs: config.flushMs,
+    batchSize: config.batchSize,
+    heartbeatMs: config.heartbeatMs,
+    metrics,
+    logger
+  });
   const reader = createStreamReader({
     redis,
     streamKey: claves.stream,
@@ -41,18 +60,13 @@ export function createPublico({ redis, config = defaultConfig, logger = console 
     instanceId: config.instanceId,
     registry,
     handleStream,
-    metrics() {
-      return {
-        instancia: config.instanceId,
-        conexiones: registry.connections.size,
-        topicos: registry.topicCount,
-        suscriptores: registry.counts(),
-        mensajesEmitidos: fanout.emitidos
-      };
-    },
+    metrics: () => metrics.local(),
+    metricsCluster: () => leerMetricasCluster(redis, claves),
     async start() {
       await sembrarCatalogo(redis, claves.catalogo);
       await reader.start();
+      fanout.start();
+      metrics.start(Math.floor(config.flushMs / 2));
       started = true;
     },
     async stop() {
@@ -61,6 +75,8 @@ export function createPublico({ redis, config = defaultConfig, logger = console 
       }
       if (started) {
         started = false;
+        fanout.stop();
+        metrics.stop();
         await reader.stop();
       }
     }

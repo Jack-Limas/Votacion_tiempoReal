@@ -1,0 +1,135 @@
+{
+  "modo": "naive",
+  "conexiones": 10000,
+  "instancias": 8,
+  "actas": {
+    "enviados": 3817,
+    "porTipo": {
+      "nueva": 3248,
+      "dudosa": 272,
+      "reenvio": 240,
+      "correccion": 57
+    },
+    "porEstado": {
+      "200": 239,
+      "201": 3285,
+      "202": 271
+    },
+    "errores": 22,
+    "segundos": 82
+  },
+  "eventosPorInstancia": [
+    3285,
+    3285,
+    3285,
+    3285,
+    3285,
+    3285,
+    3285,
+    3285
+  ],
+  "mensajesEmitidos": 19335972,
+  "mensajesIngenuos": 32850000,
+  "reduccion": 2,
+  "mensajesRecibidosPorClientes": 19335972,
+  "conexionesCerradasDuranteLaPrueba": 0,
+  "eventLoopPorSegundo": {
+    "p50DeLosP99": 293.04,
+    "p99DeLosP99": 1229.42,
+    "maxDeLosP99": 1229.42,
+    "max": 1229.42
+  },
+  "eventLoopDesdeArranque": [
+    {
+      "instancia": "6a5fedc97356",
+      "p50": 0.15,
+      "p99": 547.84,
+      "max": 1229.42
+    },
+    {
+      "instancia": "9afed7d82f88",
+      "p50": 0.15,
+      "p99": 506.95,
+      "max": 894.92
+    },
+    {
+      "instancia": "b13dd44927ca",
+      "p50": 0.15,
+      "p99": 606.56,
+      "max": 1679.26
+    },
+    {
+      "instancia": "b5c01b63c95a",
+      "p50": 0.15,
+      "p99": 516.39,
+      "max": 1217.88
+    },
+    {
+      "instancia": "c6512778a992",
+      "p50": 0.15,
+      "p99": 684.68,
+      "max": 1880.58
+    },
+    {
+      "instancia": "c9d74b36b2a0",
+      "p50": 0.14,
+      "p99": 482.83,
+      "max": 1016.56
+    },
+    {
+      "instancia": "f4b74c9e9827",
+      "p50": 0.15,
+      "p99": 611.28,
+      "max": 1219.98
+    },
+    {
+      "instancia": "f5be1adea25d",
+      "p50": 0.15,
+      "p99": 555.71,
+      "max": 1423.4
+    }
+  ],
+  "retrasoPublicacionMs": [
+    {
+      "instancia": "6a5fedc97356",
+      "p50": 334,
+      "p99": 1169
+    },
+    {
+      "instancia": "9afed7d82f88",
+      "p50": 330,
+      "p99": 1008
+    },
+    {
+      "instancia": "b13dd44927ca",
+      "p50": 426,
+      "p99": 1267
+    },
+    {
+      "instancia": "b5c01b63c95a",
+      "p50": 375,
+      "p99": 1101
+    },
+    {
+      "instancia": "c6512778a992",
+      "p50": 589,
+      "p99": 1798
+    },
+    {
+      "instancia": "c9d74b36b2a0",
+      "p50": 327,
+      "p99": 1032
+    },
+    {
+      "instancia": "f4b74c9e9827",
+      "p50": 434,
+      "p99": 1371
+    },
+    {
+      "instancia": "f5be1adea25d",
+      "p50": 391,
+      "p99": 1146
+    }
+  ],
+  "segundos": 12
+}
