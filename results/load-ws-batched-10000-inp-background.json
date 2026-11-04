@@ -1,0 +1,153 @@
+{
+  "transport": "ws",
+  "mode": "batched",
+  "clientsRequested": 10000,
+  "clientsOpen": 10000,
+  "clientsFailedToOpen": 0,
+  "serverConnections": 10001,
+  "instances": 8,
+  "simulatedMinutes": [
+    0,
+    40
+  ],
+  "speed": 30,
+  "actas": {
+    "sent": 3817,
+    "byKind": {
+      "new": 3248,
+      "doubtful": 272,
+      "resend": 240,
+      "correction": 57
+    },
+    "byStatus": {
+      "200": 240,
+      "201": 3305,
+      "202": 272
+    },
+    "errors": 0,
+    "seconds": 80
+  },
+  "messagesSent": 595159,
+  "naiveMessages": 33051808,
+  "reduction": 56,
+  "messagesReceivedByClients": 605089,
+  "pollRequests": 0,
+  "bytesReceivedPerClient": 13982,
+  "clientsClosedDuringTest": 0,
+  "latencyFromNewestEventMs": {
+    "p50": 170,
+    "p95": 810,
+    "p99": 1640,
+    "samples": 580541
+  },
+  "memory": {
+    "heapMBBefore": 134.64,
+    "heapMBWithClients": 172.62,
+    "rssMBBefore": 669.8199999999999,
+    "rssMBWithClients": 732.13,
+    "heapKBPerClient": 3.9
+  },
+  "cpuPercentPerInstance": {
+    "mean": 28.7,
+    "p95": 49.7
+  },
+  "eventLoopPerSecond": {
+    "p50OfP99": 21.7,
+    "p99OfP99": 124.87,
+    "maxOfP99": 300.64,
+    "max": 300.64
+  },
+  "eventLoopSinceStart": [
+    {
+      "instance": "2ad70c8d6ac8",
+      "p50": 0.21,
+      "p99": 26.31,
+      "max": 2336.71
+    },
+    {
+      "instance": "3241118adf90",
+      "p50": 0.21,
+      "p99": 26.96,
+      "max": 1351.05
+    },
+    {
+      "instance": "3fa941bdf43c",
+      "p50": 0.21,
+      "p99": 26.86,
+      "max": 1248.29
+    },
+    {
+      "instance": "422ff535edd5",
+      "p50": 0.21,
+      "p99": 28.04,
+      "max": 966.75
+    },
+    {
+      "instance": "637d98f14273",
+      "p50": 0.21,
+      "p99": 27.85,
+      "max": 874.47
+    },
+    {
+      "instance": "6dbe8290ce99",
+      "p50": 0.21,
+      "p99": 26.8,
+      "max": 956.79
+    },
+    {
+      "instance": "8fb9cf23ed2b",
+      "p50": 0.21,
+      "p99": 26.08,
+      "max": 1380.41
+    },
+    {
+      "instance": "feaab55bb914",
+      "p50": 0.21,
+      "p99": 29.85,
+      "max": 867.66
+    }
+  ],
+  "publishDelayMs": [
+    {
+      "instance": "2ad70c8d6ac8",
+      "p50": 729,
+      "p99": 1480
+    },
+    {
+      "instance": "3241118adf90",
+      "p50": 697,
+      "p99": 1379
+    },
+    {
+      "instance": "3fa941bdf43c",
+      "p50": 655,
+      "p99": 1555
+    },
+    {
+      "instance": "422ff535edd5",
+      "p50": 666,
+      "p99": 1374
+    },
+    {
+      "instance": "637d98f14273",
+      "p50": 684,
+      "p99": 1983
+    },
+    {
+      "instance": "6dbe8290ce99",
+      "p50": 683,
+      "p99": 1895
+    },
+    {
+      "instance": "8fb9cf23ed2b",
+      "p50": 617,
+      "p99": 1375
+    },
+    {
+      "instance": "feaab55bb914",
+      "p50": 697,
+      "p99": 1603
+    }
+  ],
+  "seconds": 58
+}
