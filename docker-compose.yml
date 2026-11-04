@@ -1,17 +1,50 @@
-# Local development dependencies. Start with: docker compose up -d
+# Entorno local: 8 réplicas idénticas detrás de nginx (round robin, sin
+# sesiones pegajosas) y un solo nodo Valkey. Las instancias no se conocen entre
+# sí: toda la coordinación pasa por Valkey.
+name: votacion
+
 services:
-  redis:
-    image: redis:7.4-alpine
-    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+  valkey:
+    image: valkey/valkey:8-alpine
+    # AOF como en la configuración de Jack: las confirmaciones sobreviven a un reinicio.
+    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     ports:
-      - "6379:6379"
+      - "${VALKEY_PORT:-6379}:6379"
     volumes:
-      - redis-data:/data
+      - valkey-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  app:
+    build: .
+    image: votacion-tiempo-real:local
+    deploy:
+      replicas: 8
+    environment:
+      # Secreto compartido por las 8 instancias para los tokens de verificación (módulo de Jack).
+      VERIFICATION_TOKEN_SECRET: ${VERIFICATION_TOKEN_SECRET:-solo-local-cambiar-en-produccion-0123456789}
+      PORT: 3000
+      REDIS_URL: redis://valkey:6379
+      MAXLEN: ${MAXLEN:-10000}
+    ulimits:
+      nofile: { soft: 200000, hard: 200000 }
+    depends_on:
+      valkey:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    ulimits:
+      nofile: { soft: 200000, hard: 200000 }
+    depends_on:
+      - app
 
 volumes:
-  redis-data:
+  valkey-data:

@@ -106,3 +106,43 @@ queue with exclusive, fenced leases; consoles live at `/verification/` and use
 the WebSocket endpoint `/ws/verification`. Run `docker compose up -d` for a
 local Redis. Design, Redis keys, TTLs, costs and failure behaviour are in
 [docs/verification.md](docs/verification.md).
+
+## Módulo público: difusión de resultados (RF-4, RF-5, RF-6)
+
+Los jurados envían actas por `POST /api/actas`. El mismo script Lua que suma el
+acta escribe el evento en el stream `st:eventos`. Cada instancia lee ese stream
+y lo reparte por SSE a los clientes suscritos. El diseño y las cifras están en
+[DISENO.md](DISENO.md).
+
+### Correr en local
+
+Requisitos: Docker con Compose y Node.js 20 o superior.
+
+```bash
+docker compose up -d --build     # 8 réplicas + nginx (http://localhost:8080) + Valkey (localhost:6379)
+npm install
+npm test                         # pruebas unitarias + integración contra el entorno
+npm run simular -- --velocidad=60   # jornada completa comprimida x60 (2 h en 2 min)
+```
+
+Si el entorno no está arriba, las pruebas de integración se omiten e indican
+cómo levantarlo. Para empezar con los datos en limpio:
+`node scripts/reset-datos.js` (FLUSHDB y vuelve a sembrar el catálogo).
+
+### Endpoints públicos
+
+- `GET /stream?sub=mun:11,pto:176,dep`: SSE. Tópicos `dep`, `mun:{id}` y `pto:{id}`.
+- `GET /whoami`: identificador de la instancia (`INSTANCE_ID` o el hostname).
+- `GET /metrics`: métricas de la instancia (conexiones y suscriptores por tópico).
+
+### Variables de entorno
+
+| Variable | Por defecto | Uso |
+|---|---|---|
+| `PORT` | 3000 | Puerto HTTP |
+| `REDIS_URL` | redis://localhost:6379 | Valkey/Redis |
+| `INSTANCE_ID` | hostname | Identificador de la instancia |
+| `MAXLEN` | 10000 | Retención del stream (`XADD MAXLEN ~`) |
+| `STREAM_BLOCK_MS` | 5000 | `BLOCK` del `XREAD` |
+| `STREAM_READ_COUNT` | 200 | `COUNT` del `XREAD` |
+| `MAX_TOPICS` | 10 | Tópicos por conexión |

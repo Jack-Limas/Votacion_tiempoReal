@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "test:unit": "node --test test/*.test.js test/unit/*.test.js",
+    "test:integration": "node --test test/integration/*.test.js",
+    "simular": "node scripts/simular-actas.js"
   },
   "engines": {
     "node": ">=20"

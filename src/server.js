@@ -9,6 +9,8 @@ import {
   redisSubClient
 } from './config/redis.js';
 import { createIdempotencyService } from './services/idempotencyService.js';
+import { createPublico } from './publico/index.js';
+import { createPublicoRoutes } from './routes/publicoRoutes.js';
 import { createWebSocketServer } from './sockets/index.js';
 import { createVerificationModule } from './verification/index.js';
 
@@ -16,8 +18,9 @@ export const verification = createVerificationModule({
   redis: redisClient,
   subscriber: redisSubClient
 });
+export const publico = createPublico({ redis: redisClient });
 export const app = createApp(createIdempotencyService(redisClient), {
-  routers: [verification.router],
+  routers: [verification.router, createPublicoRoutes(publico)],
   actaMiddleware: [verification.actaRateLimiter]
 });
 export const server = createServer(app);
@@ -28,11 +31,12 @@ export const webSocketServer = createWebSocketServer(server, {
 export async function startServer() {
   await connectRedisClients();
   await verification.start();
+  await publico.start();
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(config.port, config.host, resolve);
   });
-  console.log(`API y WebSocket listos en ${config.host}:${config.port}.`);
+  console.log(`API, WebSocket y SSE listos en ${config.host}:${config.port} (instancia ${config.instanceId}).`);
 }
 
 export async function stopServer() {
@@ -42,6 +46,9 @@ export async function stopServer() {
   for (const socket of webSocketServer.clients) {
     socket.terminate();
   }
+  // Las conexiones SSE quedan abiertas indefinidamente: hay que cerrarlas para
+  // que server.close() termine.
+  await publico.stop();
 
   const closeHttpServer = server.listening
     ? new Promise((resolve, reject) => {
