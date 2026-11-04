@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Operations Dashboard</title>
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .tile { padding: 14px 16px; }
+    .tile span { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .7px; }
+    .tile b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+    canvas { width: 100%; height: 160px; display: block; }
+    .charts { display: grid; gap: 16px; margin-bottom: 16px; }
+    @media (min-width: 900px) { .charts { grid-template-columns: 1fr 1fr; } }
+    .table-wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">⚙</div><div>Operations<small>All instances, read from Redis every second</small></div></div>
+    <span class="pill" id="conn"><span class="dot"></span>…</span>
+  </header>
+  <main>
+    <div class="tiles" id="tiles"></div>
+    <div class="charts">
+      <section class="card"><div class="card-head"><h2>Event Loop delay p99 per instance (ms)</h2></div><canvas id="loop" width="600" height="160"></canvas></section>
+      <section class="card"><div class="card-head"><h2>Messages sent per second (all instances)</h2></div><canvas id="rate" width="600" height="160"></canvas></section>
+    </div>
+    <section class="card">
+      <div class="card-head"><h2>Instances</h2><div class="spacer"></div><span class="muted" id="updated"></span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Instance</th><th>Redis</th><th class="num">Conns</th><th>Transports</th><th class="num">Msg/s</th>
+            <th class="num">EL p99 (ms)</th><th class="num">EL max</th><th class="num">CPU %</th><th class="num">Heap MB</th>
+            <th class="num">KB/conn</th><th class="num">Events/min</th><th class="num">Publish p50/p99 (ms)</th><th class="num">Slow (deg/rec/disc)</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/ops/ops.js"></script>
+</body>
+</html>
