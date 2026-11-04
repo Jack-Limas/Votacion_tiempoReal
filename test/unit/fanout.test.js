@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createFanout, reducirEntradas } from '../../src/publico/fanout.js';
-import { compareIds, parseId } from '../../src/publico/stream.js';
-import { createConnection, createTopicRegistry } from '../../src/publico/topics.js';
+import { createFanout, reducirEntradas } from '../../src/results/fanout.js';
+import { compareIds, parseId } from '../../src/results/stream.js';
+import { createConnection, createTopicRegistry } from '../../src/results/topics.js';
 
 function evento(cambios, extra = {}) {
   return { acta: 'E14-1-0001-03', version: 1, tipo: 'nueva', baja: false, ts_recepcion: Date.now(), cambios, ...extra };

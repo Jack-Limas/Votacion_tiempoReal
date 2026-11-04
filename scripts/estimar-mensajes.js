@@ -5,7 +5,7 @@
 //      [--mezcla=dep:0.5,mun:0.35,pto:0.15]
 // Supone todos los clientes conectados toda la jornada y los suscriptores de
 // municipio/puesto repartidos en proporción a las mesas.
-import { generarCatalogo } from '../src/publico/catalogo.js';
+import { generarCatalogo } from '../src/results/catalogo.js';
 import { planDeJornada } from './simular-actas.js';
 
 const valores = Object.fromEntries(process.argv.slice(2)

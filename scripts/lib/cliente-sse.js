@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import http from 'node:http';
-import { compareIds } from '../../src/publico/stream.js';
+import { compareIds } from '../../src/results/stream.js';
 
 export function subParam(subs) {
   return subs.map(({ topic, cursor }) => (cursor ? `${topic}@${cursor}` : topic)).join(',');

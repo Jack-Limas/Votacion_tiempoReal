@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { config } from '../config/env.js';
-import { crearClaves } from '../publico/claves.js';
+import { crearClaves } from '../results/claves.js';
 
 // El script vive en src/lua/aplicarActa.lua: idempotencia, acumulados y XADD
 // del evento público en una sola operación atómica.

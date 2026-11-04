@@ -1,7 +1,7 @@
 // Requiere el entorno de docker-compose (8 réplicas + nginx + Valkey).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mulberry32 } from '../../src/publico/catalogo.js';
+import { mulberry32 } from '../../src/results/catalogo.js';
 import { conectar } from '../../scripts/lib/cliente-sse.js';
 import {
   BASE_URL,

@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { entregar } from '../../src/publico/fanout.js';
-import { decidirReanudacion } from '../../src/publico/resume.js';
-import { parseId } from '../../src/publico/stream.js';
-import { PENDIENTE, createConnection } from '../../src/publico/topics.js';
+import { entregar } from '../../src/results/fanout.js';
+import { decidirReanudacion } from '../../src/results/resume.js';
+import { parseId } from '../../src/results/stream.js';
+import { PENDIENTE, createConnection } from '../../src/results/topics.js';
 
 const base = { primerId: '1000-0', ultimoId: '5000-3', pendientes: 10, maxReplay: 500 };
 

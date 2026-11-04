@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { CANDIDATOS } from '../../src/publico/catalogo.js';
+import { CANDIDATOS } from '../../src/results/catalogo.js';
 
 const TS_CIERRE = 1793577600;
 

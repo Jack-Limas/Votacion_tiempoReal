@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createConnection, createTopicRegistry, parseSubscriptions } from '../../src/publico/topics.js';
+import { createConnection, createTopicRegistry, parseSubscriptions } from '../../src/results/topics.js';
 
 test('alta y recorrido: cada tópico solo contiene sus suscriptores', () => {
   const registry = createTopicRegistry();

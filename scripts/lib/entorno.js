@@ -1,4 +1,4 @@
-import { generarCatalogo } from '../../src/publico/catalogo.js';
+import { generarCatalogo } from '../../src/results/catalogo.js';
 import { crearActa, enviarActa, votosAleatorios } from './actas.js';
 
 export const BASE_URL = process.env.BASE_URL ?? 'http://localhost:8080';

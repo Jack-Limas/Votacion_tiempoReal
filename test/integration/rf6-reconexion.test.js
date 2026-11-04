@@ -6,7 +6,7 @@
 // AB_ACTAS=250 AB_ESPERADO=snapshot npm run test:integration
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mulberry32 } from '../../src/publico/catalogo.js';
+import { mulberry32 } from '../../src/results/catalogo.js';
 import { corregirVotos, votosAleatorios } from '../../scripts/lib/actas.js';
 import { conectar, createEstadoCliente } from '../../scripts/lib/cliente-sse.js';
 import {

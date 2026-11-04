@@ -10,8 +10,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { createClient } from 'redis';
-import { generarCatalogo, mulberry32, sembrarCatalogo } from '../src/publico/catalogo.js';
-import { crearClaves } from '../src/publico/claves.js';
+import { generarCatalogo, mulberry32, sembrarCatalogo } from '../src/results/catalogo.js';
+import { crearClaves } from '../src/results/claves.js';
 import { subParam } from './lib/cliente-sse.js';
 import { simular } from './simular-actas.js';
 

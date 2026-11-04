@@ -6,7 +6,7 @@
 //      [--desde=0] [--hasta=150] [--limite=6400] [--semilla=7]
 // velocidad = factor de compresión del tiempo (60 => 2 h simuladas en 2 min).
 import { pathToFileURL } from 'node:url';
-import { generarCatalogo, mulberry32 } from '../src/publico/catalogo.js';
+import { generarCatalogo, mulberry32 } from '../src/results/catalogo.js';
 import { corregirVotos, crearActa, enviarActa, votosAleatorios } from './lib/actas.js';
 
 const MINUTO = 60_000;

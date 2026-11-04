@@ -9,7 +9,7 @@ import {
   redisSubClient
 } from './config/redis.js';
 import { createIdempotencyService } from './services/idempotencyService.js';
-import { createPublico } from './publico/index.js';
+import { createPublico } from './results/index.js';
 import { createPublicoRoutes } from './routes/publicoRoutes.js';
 import { createWebSocketServer } from './sockets/index.js';
 import { createVerificationModule } from './verification/index.js';
