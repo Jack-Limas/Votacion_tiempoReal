@@ -12,12 +12,13 @@ Only Caddy publishes ports (80 for the certificate challenge and the redirect,
 443 for the site). nginx and Valkey are reachable only inside the Docker
 network. Every secret lives in `.env` on the VM, which is never committed.
 
-> **Status of this guide.** `docker-compose.prod.yml` was started locally with
-> `SITE_ADDRESS=localhost` and `scripts/smoke.js` passed 22/22 checks through
-> Caddy → nginx → 8 replicas → Valkey. The cloud steps below were **not**
-> executed by the team that wrote them (no cloud credentials were available);
-> they use the standard Azure CLI and AWS CLI commands. Check current prices in
-> your account before creating resources.
+> **Status of this guide.** The AWS deployment has been executed on one EC2
+> instance and is live at https://184.193.102.4.sslip.io; `scripts/smoke.js`
+> passed 22/22 checks against that public URL over HTTPS, with requests
+> answered by 8 distinct instances. `docker-compose.prod.yml` had also been
+> run locally with `SITE_ADDRESS=localhost` (22/22). The Azure steps were
+> **not** tested; they use the standard Azure CLI commands. Check current
+> prices in your account before creating resources.
 
 ## Why a VM and not a serverless/PaaS platform
 
