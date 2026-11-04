@@ -10,6 +10,12 @@ function positiveInteger(value, fallback, name) {
 
 export const config = {
   port: positiveInteger(process.env.PORT, 3000, 'PORT'),
+  host: process.env.HOST ?? '0.0.0.0',
+  wsPath: process.env.WS_PATH ?? '/ws',
+  corsOrigins: (process.env.CORS_ORIGIN ?? '*')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   redisUrl: process.env.REDIS_URL ?? 'redis://localhost:6379',
   idempotencyTtlSeconds: positiveInteger(
     process.env.REDIS_IDEMPOTENCY_TTL_SECONDS,

@@ -1,9 +1,17 @@
 import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import { config } from './config.js';
 import { createActaRoutes } from './routes/actaRoutes.js';
 
 export function createApp(idempotencyService) {
   const app = express();
   app.disable('x-powered-by');
+  app.use(helmet());
+  app.use(cors({
+    origin: config.corsOrigins.includes('*') ? '*' : config.corsOrigins,
+    credentials: false
+  }));
   app.use(express.json({ limit: '64kb', strict: true }));
   app.get('/health', (_req, res) => res.status(200).json({ status: 'ok' }));
   app.use('/api/actas', createActaRoutes(idempotencyService));

@@ -1,4 +1,40 @@
-# Módulo de jurados y digitadores
+# Plataforma de transmisión electoral
+
+## Estructura base
+
+La base incluye `src/config`, `src/controllers`, `src/services`, `src/sockets`,
+`src/utils` y `public`. Para crear estos directorios desde Bash:
+
+```bash
+mkdir -p src/{config,controllers,services,sockets,utils} public
+```
+
+O desde PowerShell:
+
+```powershell
+@('src/config', 'src/controllers', 'src/services', 'src/sockets', 'src/utils', 'public') |
+  ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
+```
+
+Instala dependencias con `npm install`; usa `npm run dev` para desarrollo y
+`npm start` para ejecutar el servicio.
+
+### Redis y transporte
+
+`src/config/redis.js` exporta tres conexiones Redis independientes: comandos,
+suscripción y publicación. El cliente de suscripción no se comparte con
+comandos normales. Este diseño permite coordinar instancias mediante Pub/Sub y
+estructuras Redis sin sesiones pegajosas.
+
+Express y `ws` comparten el mismo servidor HTTP; WebSocket escucha en
+`WS_PATH`. El punto de entrada exporta `app`, `server` y `webSocketServer`,
+además de `startServer` y `stopServer`, para facilitar inyección de manejadores
+y pruebas. SSE puede añadirse como una ruta HTTP sobre el mismo servidor.
+
+Configura `CORS_ORIGIN` como una lista de orígenes separados por comas en los
+entornos desplegados. El valor `*` es solo un valor inicial de desarrollo.
+
+## Módulo actual de jurados y digitadores
 
 API Node.js para recibir actas con idempotencia Redis y una cola web persistente
 que reintenta los envíos al recuperar conectividad.
@@ -15,7 +51,7 @@ a reinicios, configure Redis con AOF y/o replicación según el nivel de
 durabilidad requerido; el TTL de idempotencia debe cubrir la ventana máxima en
 que los clientes puedan reenviar un acta.
 
-## Recepción
+## Recepción de actas
 
 `POST /api/actas` recibe el payload JSON del acta.
 
